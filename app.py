@@ -1,7 +1,12 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from pathlib import Path
+
+# tentar carregar plotly sem quebrar o app
+try:
+    import plotly.express as px
+except Exception:  # se não tiver plotly, os gráficos viram opcionais
+    px = None
 
 # ======================================================
 #                CONFIGURAÇÃO GERAL
@@ -10,12 +15,11 @@ from pathlib import Path
 st.set_page_config(
     page_title="FSJ Black Friday 2026 – Projeção de Vendas",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
-# cores
-PRIMARY = "#00E676"      # verde FSJ
-DANGER  = "#FF1744"
+PRIMARY = "#00E676"
+DANGER = "#FF1744"
 WARNING = "#FFC400"
 CARD_BG = "#141414"
 
@@ -27,12 +31,10 @@ DATA_DIR = Path("data")
 # ======================================================
 
 def fmt_num_br(valor: float, casas: int = 0):
-    """Formata número no padrão brasileiro: 1.234.567,89"""
     if pd.isna(valor):
         return "-"
     fmt = f"{valor:,.{casas}f}"
-    fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
-    return fmt
+    return fmt.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def fmt_moeda(valor: float):
@@ -49,26 +51,29 @@ def fmt_percent(frac: float, casas: int = 1):
 
 def carregar_usuarios():
     path = DATA_DIR / "usuarios.csv"
-    df = pd.read_csv(path)
-    # esperamos colunas: usuario, senha, nome
+    # sep=None + engine="python" tenta adivinhar se é ; ou ,
+    df = pd.read_csv(path, sep=None, engine="python")
+    # padronizar nomes em minúsculo
+    df.columns = [c.strip().lower() for c in df.columns]
     return df
 
 
 def carregar_resumo():
     path = DATA_DIR / "saida_resumo.csv"
     df = pd.read_csv(path)
-    row = df.iloc[0]
 
-    # garantir numéricos
+    row = df.iloc[0].copy()
+
     cols_float = [
         "meta_dia", "venda_atual_ate_slot", "percentual_dia_hist",
         "projecao_dia", "desvio_projecao",
         "total_d1", "meta_d1", "desvio_d1",
         "total_d7", "meta_d7", "desvio_d7",
-        "ritmo_vs_d1", "ritmo_vs_d7", "ritmo_vs_media"
+        "ritmo_vs_d1", "ritmo_vs_d7", "ritmo_vs_media",
     ]
     for c in cols_float:
-        row[c] = pd.to_numeric(row[c], errors="coerce")
+        if c in row.index:
+            row[c] = pd.to_numeric(row[c], errors="coerce")
 
     return row
 
@@ -77,20 +82,19 @@ def carregar_grid():
     path = DATA_DIR / "saida_grid.csv"
     df = pd.read_csv(path)
 
-    # garantir numéricos
     num_cols = [
         "valor_hoje", "valor_d1", "valor_d7", "valor_media_mes",
         "frac_hist", "acum_hoje", "acum_d1", "acum_d7", "acum_media_mes",
-        "ritmo_vs_d1", "ritmo_vs_d7", "ritmo_vs_media"
+        "ritmo_vs_d1", "ritmo_vs_d7", "ritmo_vs_media",
     ]
     for c in num_cols:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
 
     return df
 
 
 def kpi_html(titulo: str, valor: str, tooltip: str, cor_valor: str = PRIMARY):
-    """Retorna HTML de um cartão KPI com tooltip via title (nativo do navegador)."""
     return f"""
     <div title="{tooltip}"
          style="
@@ -115,7 +119,11 @@ def kpi_html(titulo: str, valor: str, tooltip: str, cor_valor: str = PRIMARY):
 
 
 def header(resumo, usuario_nome: str):
-    data_ref = pd.to_datetime(resumo["data_referencia"]).date()
+    try:
+        data_ref = pd.to_datetime(resumo["data_referencia"]).date()
+        data_str = data_ref.strftime("%d/%m/%Y")
+    except Exception:
+        data_str = "–"
 
     st.markdown(
         f"""
@@ -129,7 +137,7 @@ def header(resumo, usuario_nome: str):
         ">
             <div>
                 <div style="font-size:0.85rem;color:#E0FFE8;">
-                    Usuário: <b>{usuario_nome}</b> • Data de referência: <b>{data_ref.strftime('%d/%m/%Y')}</b>
+                    Usuário: <b>{usuario_nome}</b> • Data de referência: <b>{data_str}</b>
                 </div>
                 <div style="font-size:1.2rem;font-weight:700;color:#FFFFFF;margin-top:2px;">
                     📈 FSJ Black Friday 2026 – Projeção de Vendas (Site + App)
@@ -157,7 +165,7 @@ def header(resumo, usuario_nome: str):
 def login_screen():
     st.markdown(
         """
-        <div style="text-align:center;margin-top:80px;margin-bottom:20px;">
+        <div style="text-align:center;margin-top:40px;margin-bottom:20px;">
             <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">
                 🔐 FSJ – Painel de Projeção de Vendas
             </div>
@@ -177,14 +185,24 @@ def login_screen():
         entrar = st.form_submit_button("Entrar")
 
     if entrar:
+        # garantir que as colunas existem
+        cols = [c.lower() for c in usuarios_df.columns]
+        if not {"usuario", "senha"}.issubset(set(cols)):
+            st.error("Arquivo usuarios.csv não está no formato esperado (usuario, senha, nome).")
+            return
+
+        # padronizar colunas
+        usuarios_df.columns = cols
+
         linha = usuarios_df[
             (usuarios_df["usuario"] == usuario) &
             (usuarios_df["senha"] == senha)
         ]
+
         if linha.empty:
             st.error("Usuário ou senha inválidos.")
         else:
-            nome = linha.iloc[0]["nome"]
+            nome = linha.iloc[0]["nome"] if "nome" in linha.columns else usuario
             st.session_state["auth"] = True
             st.session_state["usuario_nome"] = nome
             st.rerun()
@@ -201,28 +219,25 @@ def main():
     usuario_nome = st.session_state.get("usuario_nome", "Usuário")
 
     header(resumo, usuario_nome)
-
     st.markdown("<br>", unsafe_allow_html=True)
-
-    # --------------------- KPIs ------------------------
 
     st.markdown("### 🎯 Visão Geral do Dia")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    meta_dia = resumo["meta_dia"]
-    venda_atual = resumo["venda_atual_ate_slot"]
-    projecao = resumo["projecao_dia"]
-    gap_proj = resumo["desvio_projecao"]
+    meta_dia = resumo.get("meta_dia", 0.0)
+    venda_atual = resumo.get("venda_atual_ate_slot", 0.0)
+    projecao = resumo.get("projecao_dia", 0.0)
+    gap_proj = resumo.get("desvio_projecao", 0.0)
 
-    total_d1 = resumo["total_d1"]
-    total_d7 = resumo["total_d7"]
-    ritmo_d1 = resumo["ritmo_vs_d1"]
-    ritmo_d7 = resumo["ritmo_vs_d7"]
-    frac_hist = resumo["percentual_dia_hist"]
-    ritmo_media = resumo["ritmo_vs_media"]
+    total_d1 = resumo.get("total_d1", 0.0)
+    total_d7 = resumo.get("total_d7", 0.0)
+    ritmo_d1 = resumo.get("ritmo_vs_d1", 0.0)
+    ritmo_d7 = resumo.get("ritmo_vs_d7", 0.0)
+    frac_hist = resumo.get("percentual_dia_hist", 0.0)
+    ritmo_media = resumo.get("ritmo_vs_media", 0.0)
 
-    # Linha 1
+    # linha 1
     with col1:
         st.markdown(
             kpi_html(
@@ -254,7 +269,7 @@ def main():
                 (
                     "Projeção construída a partir da venda acumulada, dividida "
                     "pelo percentual médio do mês correspondente ao horário, "
-                    "com um ajuste de consistência baseado no histórico intradia."
+                    "com uma checagem pelos ritmos vs D-1, D-7 e média do mês."
                 ),
                 cor_proj,
             ),
@@ -274,7 +289,7 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # Linha 2
+    # linha 2
     col5, col6, col7, col8 = st.columns(4)
 
     with col5:
@@ -304,8 +319,7 @@ def main():
             kpi_html(
                 "Ritmo vs D-1",
                 f"{fmt_num_br(ritmo_d1, 2)}x",
-                "Ritmo acumulado de hoje dividido pelo acumulado de D-1 no mesmo horário. "
-                "Acima de 1 indica que hoje está à frente de ontem.",
+                "Ritmo acumulado de hoje dividido pelo acumulado de D-1 no mesmo horário.",
                 PRIMARY if ritmo_d1 >= 1 else DANGER,
             ),
             unsafe_allow_html=True,
@@ -316,14 +330,13 @@ def main():
             kpi_html(
                 "Ritmo vs D-7",
                 f"{fmt_num_br(ritmo_d7, 2)}x",
-                "Ritmo acumulado de hoje dividido pelo acumulado de D-7 no mesmo horário. "
-                "Acima de 1 indica que hoje está à frente da semana passada.",
+                "Ritmo acumulado de hoje dividido pelo acumulado de D-7 no mesmo horário.",
                 PRIMARY if ritmo_d7 >= 1 else DANGER,
             ),
             unsafe_allow_html=True,
         )
 
-    # Linha 3 – dia percorrido e ritmo vs média
+    # linha 3
     col9, col10 = st.columns(2)
 
     with col9:
@@ -331,8 +344,7 @@ def main():
             kpi_html(
                 "Dia já percorrido (curva histórica)",
                 fmt_percent(frac_hist, 1),
-                "Percentual médio do mês que já deveria ter sido vendido até este slot, "
-                "segundo a curva intradia histórica.",
+                "Percentual médio do mês que já deveria ter sido vendido até este slot.",
                 WARNING,
             ),
             unsafe_allow_html=True,
@@ -343,8 +355,7 @@ def main():
             kpi_html(
                 "Ritmo vs média do mês",
                 f"{fmt_num_br(ritmo_media, 2)}x",
-                "Compara a venda acumulada de hoje com a média acumulada dos dias do mês "
-                "no mesmo horário. Ajuda a ver se o dia está dentro do padrão recente.",
+                "Compara a venda acumulada de hoje com a média do mês no mesmo horário.",
                 PRIMARY if ritmo_media >= 1 else DANGER,
             ),
             unsafe_allow_html=True,
@@ -352,9 +363,13 @@ def main():
 
     st.markdown("---")
 
-    # ---------------------- INSIGHTS ------------------------
+    # ---------------------- INSIGHTS -----------------
 
     st.markdown("### 🧠 Insights Estratégicos")
+
+    exp_r = resumo.get("explicacao_ritmo", "")
+    exp_d1 = resumo.get("explicacao_d1", "")
+    exp_d7 = resumo.get("explicacao_d7", "")
 
     st.markdown(
         f"""
@@ -365,9 +380,9 @@ def main():
             border:1px solid rgba(255,255,255,0.08);
         ">
             <ul style="padding-left:18px;margin:0;font-size:0.9rem;color:#EEEEEE;">
-                <li>{resumo['explicacao_ritmo']}</li>
-                <li>{resumo['explicacao_d1']}</li>
-                <li>{resumo['explicacao_d7']}</li>
+                <li>{exp_r}</li>
+                <li>{exp_d1}</li>
+                <li>{exp_d7}</li>
             </ul>
         </div>
         """,
@@ -376,80 +391,72 @@ def main():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ---------------------- EXPLICAÇÃO DO MODELO ------------------------
+    # ------------------ EXPLICAÇÃO DO MODELO -------------
 
     st.markdown("#### ⚙️ Como a projeção é calculada?")
 
     explicacao_modelo = f"""
-    A projeção de fechamento **não** é um simples `venda × fator`.  
-    Ela segue uma lógica em três camadas:
+    A projeção de fechamento é construída em três camadas:
 
     1. **Curva intradia histórica**  
-       - Para cada slot de 15 minutos calculamos, ao longo do mês, qual fração do dia já havia sido vendida.  
-       - No horário atual, essa fração média é de **{fmt_percent(frac_hist, 2)}**.
+       • Calculamos, para cada slot de 15 minutos, qual fração do dia já foi vendida ao longo do mês.  
+       • No horário atual, essa fração média é de **{fmt_percent(frac_hist, 2)}**.
 
     2. **Base de projeção**  
-       - Tomamos a venda acumulada de hoje até o último slot (**{fmt_moeda(venda_atual)}**)  
-       - Dividimos por essa fração histórica do dia, obtendo um valor de referência de fechamento.
+       • Consideramos a venda acumulada de hoje (**{fmt_moeda(venda_atual)}**).  
+       • Dividimos pela fração histórica do horário atual, obtendo um fechamento esperado.
 
     3. **Camada de ritmo e consistência**  
-       - Monitoramos o ritmo contra **D-1 ({fmt_num_br(ritmo_d1,2)}x)**, **D-7 ({fmt_num_br(ritmo_d7,2)}x)** e contra a **média do mês ({fmt_num_br(ritmo_media,2)}x)**.  
-       - Esses ritmos funcionam como uma checagem de consistência: se algum dia estiver muito fora do padrão, a leitura fica evidente nos indicadores, evitando uma projeção ingênua.
+       • Monitoramos os ritmos vs D-1 (**{fmt_num_br(ritmo_d1,2)}x**), vs D-7 (**{fmt_num_br(ritmo_d7,2)}x**) e vs média do mês (**{fmt_num_br(ritmo_media,2)}x**).  
+       • Esses indicadores funcionam como checagem de consistência: se o comportamento do dia estiver muito fora do padrão, isso aparece imediatamente nos ritmos.
 
     O resultado final é a projeção exibida em **“Projeção de fechamento”**, hoje em **{fmt_moeda(projecao)}**, com gap projetado de **{fmt_moeda(gap_proj)}** em relação à meta.
     """
 
     st.markdown(explicacao_modelo)
 
-    # ---------------------- GRÁFICOS ------------------------
-
     st.markdown("---")
     st.markdown("### 📊 Curvas de Vendas | DDT Slot a Slot")
 
-    tab1, tab2 = st.tabs(["Curva por slot", "Acumulado por slot"])
+    if px is None:
+        st.warning("Plotly não está instalado. Adicione `plotly` ao requirements.txt para ver os gráficos.")
+    else:
+        tab1, tab2 = st.tabs(["Curva por slot", "Acumulado por slot"])
 
-    with tab1:
-        fig = px.line(
-            grid,
-            x="SLOT",
-            y=["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"],
-            labels={"value": "Vendas (R$)", "SLOT": "Horário", "variable": "Série"},
-        )
-        fig.update_layout(
-            legend_title_text="Série",
-            template="plotly_dark",
-            height=420,
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        with tab1:
+            fig = px.line(
+                grid,
+                x="SLOT",
+                y=["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"],
+                labels={"value": "Vendas (R$)", "SLOT": "Horário", "variable": "Série"},
+            )
+            fig.update_layout(template="plotly_dark", height=420)
+            st.plotly_chart(fig, use_container_width=True)
 
-    with tab2:
-        fig2 = px.line(
-            grid,
-            x="SLOT",
-            y=["acum_hoje", "acum_d1", "acum_d7", "acum_media_mes"],
-            labels={"value": "Vendas Acumuladas (R$)", "SLOT": "Horário", "variable": "Série"},
-        )
-        fig2.update_layout(
-            legend_title_text="Série",
-            template="plotly_dark",
-            height=420,
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-
-    # ---------------------- TABELA ------------------------
+        with tab2:
+            fig2 = px.line(
+                grid,
+                x="SLOT",
+                y=["acum_hoje", "acum_d1", "acum_d7", "acum_media_mes"],
+                labels={"value": "Vendas Acumuladas (R$)", "SLOT": "Horário", "variable": "Série"},
+            )
+            fig2.update_layout(template="plotly_dark", height=420)
+            st.plotly_chart(fig2, use_container_width=True)
 
     st.markdown("### 🧮 Tabela detalhada – DDT Slot a Slot")
 
     df_show = grid.copy()
-    # Formatar algumas colunas de modo mais amigável na tabela
+
     for col in ["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes",
                 "acum_hoje", "acum_d1", "acum_d7", "acum_media_mes"]:
-        df_show[col] = df_show[col].apply(fmt_moeda)
+        if col in df_show.columns:
+            df_show[col] = df_show[col].apply(fmt_moeda)
 
-    df_show["frac_hist"] = df_show["frac_hist"].apply(lambda x: fmt_percent(x, 2))
-    df_show["ritmo_vs_d1"] = df_show["ritmo_vs_d1"].apply(lambda x: f"{fmt_num_br(x,2)}x")
-    df_show["ritmo_vs_d7"] = df_show["ritmo_vs_d7"].apply(lambda x: f"{fmt_num_br(x,2)}x")
-    df_show["ritmo_vs_media"] = df_show["ritmo_vs_media"].apply(lambda x: f"{fmt_num_br(x,2)}x")
+    if "frac_hist" in df_show.columns:
+        df_show["frac_hist"] = df_show["frac_hist"].apply(lambda x: fmt_percent(x, 2))
+    for col in ["ritmo_vs_d1", "ritmo_vs_d7", "ritmo_vs_media"]:
+        if col in df_show.columns:
+            df_show[col] = df_show[col].apply(lambda x: f"{fmt_num_br(x,2)}x")
 
     st.dataframe(df_show, use_container_width=True, height=420)
 
