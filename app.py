@@ -1,143 +1,205 @@
 import streamlit as st
 import pandas as pd
-import hashlib
+from datetime import datetime, timedelta
 
-# ============================================================
-# CONFIGURAÇÃO
-# ============================================================
-
+# ======================================================
+#                 CONFIGURAÇÃO DO APP
+# ======================================================
 st.set_page_config(
-    page_title="📈 Projeção de Vendas — Black Friday 2025",
+    page_title="📈 Projeção de Vendas – FSJ Black Friday",
     layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ============================================================
-# FUNÇÃO DE LOGIN
-# ============================================================
+# Tema de cores
+PRIMARY = "#00C853"   # Verde
+DANGER = "#D50000"    # Vermelho
+WARNING = "#FFD600"   # Amarelo
+CARD_BG = "#1E1E1E"
 
-def hash_password(password: str):
-    return hashlib.sha256(password.encode()).hexdigest()
+# ======================================================
+#                   SISTEMA DE LOGIN
+# ======================================================
 
-# Usuários permitidos
-USERS = {
-    "fsj": hash_password("blackfriday2025"),
-    "lucas": hash_password("fsj2025")
-}
+def check_login():
+    st.markdown("### 🔐 Login – Farmácias São João")
 
-def login():
-    st.markdown("## 🔐 Login — Farmácias São João")
-    st.markdown("### Black Friday 2025")
+    user = st.text_input("Usuário")
+    pwd  = st.text_input("Senha", type="password")
 
-    username = st.text_input("Usuário")
-    password = st.text_input("Senha", type="password")
-    
-    if st.button("Entrar", use_container_width=True):
-        if username in USERS and USERS[username] == hash_password(password):
+    if st.button("Entrar"):
+        if user == "farmacias_sao_joao" and pwd == "blackfriday2025":
             st.session_state["auth"] = True
-            st.session_state["user"] = username
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Usuário ou senha incorretos.")
 
+if "auth" not in st.session_state:
+    st.session_state["auth"] = False
+
+if not st.session_state["auth"]:
+    check_login()
     st.stop()
 
-# Se não estiver autenticado → mostrar tela de login
-if "auth" not in st.session_state:
-    login()
+# ======================================================
+#                    FUNÇÕES AUXILIARES
+# ======================================================
+def meta_do_dia(metas_df, data_ref):
+    dia = pd.to_datetime(data_ref).day
+    row = metas_df[metas_df["dia"] == dia]
+    return float(row["total"].values[0]) if not row.empty else 0.0
 
-# ============================================================
-# CABEÇALHO EXECUTIVO
-# ============================================================
 
-st.markdown(
-    """
-    <h1 style='text-align:center; color:#0A74DA;'>
-        📈 Painel Executivo — Projeção de Vendas<br>
-        <span style='font-size:22px;'>Farmácias São João — Black Friday 2025</span>
-    </h1>
-    <br>
-    """,
-    unsafe_allow_html=True
-)
+def montar_projecao(df_slots, meta_dia, data_ref=None):
+    df = df_slots.copy()
 
-# ============================================================
-# IMPORTAÇÃO DOS DADOS
-# ============================================================
+    if data_ref is None:
+        data_ref = df["DATA"].max()
 
-df_grid = pd.read_csv("data/saida_grid.csv")
-df_resumo = pd.read_csv("data/saida_resumo.csv")
+    data_ref = pd.to_datetime(data_ref).date()
+    data_d1 = data_ref - timedelta(days=1)
+    data_d7 = data_ref - timedelta(days=7)
 
-resumo = df_resumo.iloc[0]
+    def curva(data_alvo):
+        cur = df[df["DATA"] == data_alvo]
+        if cur.empty:
+            return pd.DataFrame({"SLOT": [], "VALOR_TOTAL_15M": []})
+        return (
+            cur.groupby("SLOT")["VALOR_TOTAL_15M"]
+            .sum()
+            .reset_index()
+            .sort_values("SLOT")
+        )
 
-# ============================================================
-# KPIS — CARDS EXECUTIVOS
-# ============================================================
+    curva_hoje = curva(data_ref)
+    curva_d1   = curva(data_d1)
+    curva_d7   = curva(data_d7)
+
+    mes = pd.to_datetime(data_ref).month
+    ano = pd.to_datetime(data_ref).year
+    base_mes = df[(pd.to_datetime(df["DATA"]).dt.month == mes) &
+                  (pd.to_datetime(df["DATA"]).dt.year == ano)]
+
+    curva_media = base_mes.groupby("SLOT")["VALOR_TOTAL_15M"].mean().reset_index()
+
+    grid = curva_hoje[["SLOT"]].copy()
+    grid = grid.merge(curva_hoje.rename(columns={"VALOR_TOTAL_15M": "valor_hoje"}), on="SLOT")
+    grid = grid.merge(curva_d1.rename(columns={"VALOR_TOTAL_15M": "valor_d1"}), on="SLOT", how="left")
+    grid = grid.merge(curva_d7.rename(columns={"VALOR_TOTAL_15M": "valor_d7"}), on="SLOT", how="left")
+    grid = grid.merge(curva_media.rename(columns={"VALOR_TOTAL_15M": "valor_media_mes"}), on="SLOT", how="left")
+
+    grid = grid.fillna(0)
+
+    grid["acum_hoje"]      = grid["valor_hoje"].cumsum()
+    grid["acum_d1"]        = grid["valor_d1"].cumsum()
+    grid["acum_d7"]        = grid["valor_d7"].cumsum()
+    grid["acum_media_mes"] = grid["valor_media_mes"].cumsum()
+
+    grid["frac_hist"] = grid["acum_media_mes"] / grid["acum_media_mes"].max()
+
+    ultimo = grid.index.max()
+    venda_atual = grid.loc[ultimo, "acum_hoje"]
+
+    ritmo_d1 = venda_atual / grid.loc[ultimo, "acum_d1"] if grid.loc[ultimo, "acum_d1"] > 0 else 0
+    ritmo_d7 = venda_atual / grid.loc[ultimo, "acum_d7"] if grid.loc[ultimo, "acum_d7"] > 0 else 0
+    ritmo_media = venda_atual / grid.loc[ultimo, "acum_media_mes"] if grid.loc[ultimo, "acum_media_mes"] > 0 else 0
+
+    frac_hist_atual = grid.loc[ultimo, "frac_hist"]
+    projecao = venda_atual / frac_hist_atual if frac_hist_atual > 0 else venda_atual
+
+    total_d1 = grid["acum_d1"].max()
+    total_d7 = grid["acum_d7"].max()
+
+    resumo = {
+        "meta_dia": meta_dia,
+        "venda_atual": venda_atual,
+        "projecao": projecao,
+        "gap": projecao - meta_dia,
+        "ritmo_d1": ritmo_d1,
+        "ritmo_d7": ritmo_d7,
+        "ritmo_media": ritmo_media,
+        "total_d1": total_d1,
+        "total_d7": total_d7,
+        "frac_hist": frac_hist_atual,
+        "data": str(data_ref),
+    }
+
+    return grid, resumo
+
+# ======================================================
+#                  CARREGAR BASES
+# ======================================================
+
+df = pd.read_csv("data/ultima_base.csv")
+df["DATA"] = pd.to_datetime(df["DATA"]).dt.date
+
+metas = pd.read_excel("data/metas_novembro.xlsx").rename(columns={
+    "Dia": "dia",
+    "App": "app",
+    "Site": "site",
+    "site + APP": "total"
+})
+
+meta_dia = meta_do_dia(metas, df["DATA"].max())
+
+# Executar modelo
+grid, resumo = montar_projecao(df, meta_dia)
+
+# ======================================================
+#             DASHBOARD EXECUTIVO: KPIs
+# ======================================================
+st.title("📈 Painel Executivo – Projeção de Vendas (Site + App)")
 
 col1, col2, col3, col4 = st.columns(4)
 
-def card(col, title, value, color="#0A74DA"):
-    col.markdown(
+def kpi(card_title, value, color):
+    st.markdown(
         f"""
-        <div style="
-            background-color:#f8f9fa;
-            padding:20px;
-            border-radius:12px;
-            box-shadow:0 2px 6px rgba(0,0,0,0.1);
-            text-align:center;
-        ">
-            <h3 style="color:{color}; margin-bottom:5px;">{title}</h3>
-            <h2 style="font-weight:bold; margin-top:0;">{value}</h2>
+        <div style='background:{CARD_BG}; padding:18px; border-radius:10px; text-align:center; border-left:6px solid {color};'>
+            <h4 style='margin:0; color:#FFF'>{card_title}</h4>
+            <h2 style='margin:0; color:{color}'>{value}</h2>
         </div>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
 
-card(col1, "Meta do Dia", f"R$ {resumo['meta_dia']:,.0f}")
-card(col2, "Projeção Final", f"R$ {resumo['projecao_dia']:,.0f}")
-card(col3, "Venda Atual", f"R$ {resumo['venda_atual_ate_slot']:,.0f}")
-card(col4, "Gap vs Meta", f"R$ {resumo['desvio_projecao']:,.0f}",
-     color="#D9534F" if resumo["desvio_projecao"] < 0 else "#28A745")
+kpi("Meta do Dia", f"R$ {resumo['meta_dia']:,.0f}", PRIMARY)
+kpi("Venda Atual", f"R$ {resumo['venda_atual']:,.0f}", PRIMARY)
+kpi("Projeção do Dia", f"R$ {resumo['projecao']:,.0f}",
+    PRIMARY if resumo["projecao"] >= resumo["meta_dia"] else DANGER)
+kpi("Gap Projetado", f"R$ {resumo['gap']:,.0f}",
+    PRIMARY if resumo["gap"] >= 0 else DANGER)
 
-# ============================================================
-# GRÁFICO PRINCIPAL (DDT)
-# ============================================================
+# ======================================================
+#                  INSIGHTS EXECUTIVOS
+# ======================================================
 
-st.markdown("## 📊 Curva DDT — Slot a Slot")
+st.subheader("🧠 Insights Estratégicos")
 
-plot_df = df_grid.set_index("SLOT")[[
-    "valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"
-]]
+ins = f"""
+• Até agora vendemos **R$ {resumo['venda_atual']:,.0f}**, equivalente a **{resumo['frac_hist']*100:.2f}%** da curva histórica.  
+• A projeção indica **R$ {resumo['projecao']:,.0f}**, contra meta de **R$ {resumo['meta_dia']:,.0f}**.  
+• Comparação com ontem (D-1): **R$ {resumo['total_d1']:,.0f}** no mesmo horário.  
+• Comparação com semana passada (D-7): **R$ {resumo['total_d7']:,.0f}** no mesmo horário.  
+• Ritmo atual vs D-1: **{resumo['ritmo_d1']:.2f}x**  
+• Ritmo atual vs D-7: **{resumo['ritmo_d7']:.2f}x**
+"""
 
-st.line_chart(plot_df)
+st.info(ins)
 
-# ============================================================
-# RESUMO EXPLICATIVO
-# ============================================================
+# ======================================================
+#                    CURVA DDT
+# ======================================================
 
-st.markdown("## 📝 Resumo Executivo")
+st.subheader("📊 Curva DDT – Slot a Slot")
 
-st.write(f"📌 **Referência:** {resumo['data_referencia']}")
-st.write(f"📌 **Projeção:** R$ {resumo['projecao_dia']:,.0f}")
-st.write(f"📌 **Venda Atual:** R$ {resumo['venda_atual_ate_slot']:,.0f}")
-st.write(f"📌 **Ritmo vs D-1:** {resumo['ritmo_vs_d1']:.2f}x")
-st.write(f"📌 **Ritmo vs D-7:** {resumo['ritmo_vs_d7']:.2f}x")
-st.write(f"📌 **Ritmo vs Média:** {resumo['ritmo_vs_media']:.2f}x")
+st.line_chart(
+    grid.set_index("SLOT")[["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"]]
+)
 
-st.info(resumo["explicacao_ritmo"])
-st.info(resumo["explicacao_d1"])
-st.info(resumo["explicacao_d7"])
+# ======================================================
+#                TABELA DETALHADA
+# ======================================================
+st.subheader("🧮 Tabela Completa")
 
-# ============================================================
-# TABELA COMPLETA
-# ============================================================
-
-st.markdown("## 📋 Tabela Completa — DDT")
-st.dataframe(df_grid, use_container_width=True)
-
-# ============================================================
-# DOWNLOADS
-# ============================================================
-
-st.markdown("## ⬇️ Downloads")
-st.download_button("Baixar DDT (Grid)", df_grid.to_csv(index=False), "saida_grid.csv")
-st.download_button("Baixar Resumo", df_resumo.to_csv(index=False), "saida_resumo.csv")
+st.dataframe(grid, use_container_width=True)
