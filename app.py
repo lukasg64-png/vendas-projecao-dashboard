@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
+import locale
 
 # ======================================================
 #            CONFIGURAÇÃO GERAL DO APP
@@ -12,14 +13,36 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Paleta de cores do tema
+# Tenta usar locale PT-BR para formatação
+try:
+    locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
+except:
+    # Se não tiver no servidor, vamos usar fallback manual
+    pass
+
 PRIMARY = "#00C853"   # Verde FSJ
 DANGER  = "#FF1744"   # Vermelho alerta
 WARNING = "#FFD600"   # Amarelo atenção
 CARD_BG = "#151515"   # Fundo dos cards
-BG_DARK = "#0B0B0B"
+BG_DARK = "#050505"   # Fundo geral
 
-# CSS para deixar o visual mais “Black Friday FSJ”
+def money_br(valor, com_centavos=True):
+    """Formata número no padrão brasileiro: 1.234.567,89."""
+    try:
+        if com_centavos:
+            return locale.format_string("%.2f", float(valor), grouping=True)
+        else:
+            return locale.format_string("%.0f", float(valor), grouping=True)
+    except:
+        # Fallback caso locale não funcione
+        if com_centavos:
+            s = f"{float(valor):,.2f}"
+        else:
+            s = f"{float(valor):,.0f}"
+        s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+        return s
+
+# CSS visual
 st.markdown(
     f"""
     <style>
@@ -33,14 +56,14 @@ st.markdown(
             color: #FFFFFF;
         }}
         .subtitle {{
-            font-size: 16px !important;
+            font-size: 15px !important;
             color: #CCCCCC;
         }}
         .logo-box {{
             background: linear-gradient(90deg, #00C853 0%, #1DE9B6 50%, #000000 100%);
             padding: 14px 24px;
             border-radius: 12px;
-            margin-bottom: 10px;
+            margin-bottom: 18px;
         }}
     </style>
     """,
@@ -57,16 +80,19 @@ def load_users(path: str = "data/usuarios.csv") -> pd.DataFrame:
     if not p.exists():
         # fallback: um usuário padrão se o CSV não existir
         return pd.DataFrame(
-            [{"usuario": "farmacias_sao_joao", "senha": "blackfriday2025", "nome": "Admin", "perfil": "admin"}]
+            [{"usuario": "farmacias_sao_joao",
+              "senha": "blackfriday2026",
+              "nome": "Admin",
+              "perfil": "admin"}]
         )
     df = pd.read_csv(p)
-    # normalizar nomes de colunas
     df.columns = [c.strip().lower() for c in df.columns]
+    # garantir colunas mínimas
+    if "usuario" not in df.columns or "senha" not in df.columns:
+        raise ValueError("Arquivo usuarios.csv precisa ter colunas 'usuario' e 'senha'.")
     return df
 
-
 def autenticar_usuario(usuario: str, senha: str, users_df: pd.DataFrame):
-    """Retorna a linha do usuário se login estiver correto, senão None."""
     if not usuario or not senha:
         return None
     mask = (users_df["usuario"] == usuario) & (users_df["senha"] == senha)
@@ -74,18 +100,23 @@ def autenticar_usuario(usuario: str, senha: str, users_df: pd.DataFrame):
         return users_df[mask].iloc[0]
     return None
 
-
 def tela_login():
     users_df = load_users()
 
-    st.markdown("<div class='logo-box'><span class='big-title'>FSJ Black Friday 2026</span><br><span class='subtitle'>Painel de Projeção de Vendas – Site + App</span></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='logo-box'>"
+        "<span class='big-title'>FSJ Black Friday 2026</span><br>"
+        "<span class='subtitle'>Painel de Projeção de Vendas – Site + App</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown("### 🔐 Acesso Restrito")
 
     col_login, col_info = st.columns([1, 1.2])
 
     with col_login:
-        usuario = st.text_input("Usuário", key="login_user")
-        senha   = st.text_input("Senha", type="password", key="login_pwd")
+        usuario = st.text_input("Usuário")
+        senha   = st.text_input("Senha", type="password")
 
         if st.button("Entrar", type="primary", use_container_width=True):
             user_row = autenticar_usuario(usuario, senha, users_df)
@@ -95,25 +126,31 @@ def tela_login():
                 st.session_state["user_profile"] = user_row.get("perfil", "user")
                 st.experimental_rerun()
             else:
-                st.error("Usuário ou senha inválidos. Verifique e tente novamente.")
+                st.error("Usuário ou senha inválidos.")
 
     with col_info:
         st.markdown(
             """
             **FSJ Black Friday 2026 – Painel Executivo**
 
-            - Controle diário de **meta x venda x projeção**
-            - Comparação com **D-1** e **D-7** (mesmo horário)
-            - Curva intradia baseada no comportamento histórico
-            - Indicadores em tempo real para decisões táticas
+            - Monitoramento de **meta x venda x projeção** em tempo quase real  
+            - Comparativos com **D-1** e **D-7** por mesmo horário  
+            - Curva intradia baseada no histórico do mês  
+            - Indicadores de ritmo para decisões táticas durante o dia  
 
-            > Para adicionar ou alterar usuários, basta editar o arquivo `data/usuarios.csv`
+            > Para incluir/alterar acessos, edite o arquivo `data/usuarios.csv`
             > com as colunas `usuario`, `senha`, `nome` (e opcionalmente `perfil`).
             """
         )
 
+    st.markdown(
+        "<p style='text-align:center; color:#888; margin-top:40px;'>"
+        "Feito por: <b>Planejamento e Dados – E-commerce FSJ</b>"
+        "</p>",
+        unsafe_allow_html=True,
+    )
 
-# Estado de autenticação
+# estado de autenticação
 if "auth" not in st.session_state:
     st.session_state["auth"] = False
 
@@ -129,11 +166,10 @@ if not st.session_state["auth"]:
 def load_resumo(path: str = "data/saida_resumo.csv") -> pd.Series:
     df = pd.read_csv(path)
     if df.empty:
-        raise ValueError("Arquivo saída_resumo.csv está vazio.")
+        raise ValueError("Arquivo saida_resumo.csv está vazio.")
     row = df.iloc[0]
     row.index = [c.strip() for c in row.index]
     return row
-
 
 @st.cache_data
 def load_grid(path: str = "data/saida_grid.csv") -> pd.DataFrame:
@@ -141,72 +177,41 @@ def load_grid(path: str = "data/saida_grid.csv") -> pd.DataFrame:
     df.columns = [c.strip() for c in df.columns]
     return df
 
-
-def get_first(row: pd.Series, keys, default=None):
-    """Pega o primeiro campo existente em `keys`."""
-    if isinstance(keys, str):
-        keys = [keys]
-    for k in keys:
-        if k in row.index:
-            return row[k]
-    return default
-
-
-# Carrega dados
-try:
-    resumo_row = load_resumo()
-    grid = load_grid()
-except Exception as e:
-    st.error(f"Erro ao carregar arquivos de saída: {e}")
-    st.stop()
+resumo_row = load_resumo()
+grid = load_grid()
 
 # ======================================================
-#        EXTRAIR MÉTRICAS DO RESUMO (COM ROBUSTEZ)
+#      EXTRAIR MÉTRICAS DO RESUMO (COLUNAS JÁ CONHECIDAS)
 # ======================================================
 
-data_ref = get_first(resumo_row, ["data_referencia", "data"], "")
-meta_dia = float(get_first(resumo_row, ["meta_dia", "MetaDia", "meta_total", "Meta_TOTAL"], 0.0))
-
-venda_atual = float(
-    get_first(resumo_row, ["venda_atual_ate_slot", "venda_atual", "VendaAtual"], 0.0)
-)
-
-projecao = float(
-    get_first(resumo_row, ["projecao_dia", "projecao", "ProjecaoDia"], venda_atual)
-)
-
-gap = get_first(resumo_row, ["desvio_projecao", "gap"], None)
-if gap is None:
-    gap = projecao - meta_dia
-gap = float(gap)
-
-percent_hist = float(
-    get_first(resumo_row, ["percentual_dia_hist", "frac_hist"], 0.0)
-)
-
-total_d1  = float(get_first(resumo_row, ["total_d1"], 0.0))
-meta_d1   = float(get_first(resumo_row, ["meta_d1"], meta_dia))
-desvio_d1 = float(get_first(resumo_row, ["desvio_d1"], total_d1 - meta_d1))
-
-total_d7  = float(get_first(resumo_row, ["total_d7"], 0.0))
-meta_d7   = float(get_first(resumo_row, ["meta_d7"], meta_dia))
-desvio_d7 = float(get_first(resumo_row, ["desvio_d7"], total_d7 - meta_d7))
-
-ritmo_vs_d1    = float(get_first(resumo_row, ["ritmo_vs_d1"], 0.0))
-ritmo_vs_d7    = float(get_first(resumo_row, ["ritmo_vs_d7"], 0.0))
-ritmo_vs_media = float(get_first(resumo_row, ["ritmo_vs_media"], 0.0))
-
-exp_ritmo = get_first(resumo_row, "explicacao_ritmo", "")
-exp_d1    = get_first(resumo_row, "explicacao_d1", "")
-exp_d7    = get_first(resumo_row, "explicacao_d7", "")
+data_ref             = resumo_row["data_referencia"]
+meta_dia             = float(resumo_row["meta_dia"])
+venda_atual          = float(resumo_row["venda_atual_ate_slot"])
+percent_hist         = float(resumo_row["percentual_dia_hist"])
+projecao             = float(resumo_row["projecao_dia"])
+gap                  = float(resumo_row["desvio_projecao"])
+total_d1             = float(resumo_row["total_d1"])
+meta_d1              = float(resumo_row["meta_d1"])
+desvio_d1            = float(resumo_row["desvio_d1"])
+total_d7             = float(resumo_row["total_d7"])
+meta_d7              = float(resumo_row["meta_d7"])
+desvio_d7            = float(resumo_row["desvio_d7"])
+ritmo_vs_d1          = float(resumo_row["ritmo_vs_d1"])
+ritmo_vs_d7          = float(resumo_row["ritmo_vs_d7"])
+ritmo_vs_media       = float(resumo_row["ritmo_vs_media"])
+exp_ritmo            = resumo_row["explicacao_ritmo"]
+exp_d1               = resumo_row["explicacao_d1"]
+exp_d7               = resumo_row["explicacao_d7"]
 
 # ======================================================
 #                    CABEÇALHO
 # ======================================================
 
 st.markdown(
-    "<div class='logo-box'><span class='big-title'>📈 FSJ Black Friday 2026 – Projeção de Vendas (Site + App)</span><br>"
-    f"<span class='subtitle'>Usuário: {st.session_state.get('user_name', 'N/A')} • Data de referência: {data_ref}</span></div>",
+    "<div class='logo-box'>"
+    "<span class='big-title'>📈 FSJ Black Friday 2026 – Projeção de Vendas (Site + App)</span><br>"
+    f"<span class='subtitle'>Usuário: {st.session_state.get('user_name', 'N/A')} • Data de referência: {data_ref}</span>"
+    "</div>",
     unsafe_allow_html=True,
 )
 
@@ -221,13 +226,17 @@ if st.sidebar.button("Sair da sessão"):
 #                 FUNÇÃO DE CARD KPI
 # ======================================================
 
-def kpi(title: str, value: str, color: str, help_text: str | None = None):
-    tooltip = f"title='{help_text}'" if help_text else ""
+def kpi(title: str, value: str, color: str):
     st.markdown(
         f"""
-        <div style="background:{CARD_BG}; padding:18px; border-radius:14px;
-                    text-align:center; border:1px solid #333; box-shadow:0 0 12px rgba(0,0,0,0.6);">
-            <div style="font-size:14px; color:#CCCCCC; margin-bottom:6px;" {tooltip}>{title}</div>
+        <div style="
+            background:{CARD_BG};
+            padding:18px;
+            border-radius:14px;
+            text-align:center;
+            border:1px solid #333;
+            box-shadow:0 0 12px rgba(0,0,0,0.7);">
+            <div style="font-size:14px; color:#CCCCCC; margin-bottom:6px;">{title}</div>
             <div style="font-size:26px; font-weight:700; color:{color};">{value}</div>
         </div>
         """,
@@ -240,35 +249,39 @@ def kpi(title: str, value: str, color: str, help_text: str | None = None):
 
 st.markdown("### 🎯 Visão Geral do Dia")
 
-row1 = st.columns(4)
-with row1[0]:
-    kpi("Meta do Dia", f"R$ {meta_dia:,.0f}", PRIMARY)
-with row1[1]:
-    kpi("Venda Atual", f"R$ {venda_atual:,.0f}", PRIMARY)
-with row1[2]:
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    kpi("Meta do Dia", f"R$ {money_br(meta_dia, com_centavos=False)}", PRIMARY)
+with c2:
+    kpi("Venda Atual", f"R$ {money_br(venda_atual, com_centavos=False)}", PRIMARY)
+with c3:
     cor_proj = PRIMARY if projecao >= meta_dia else DANGER
-    kpi("Projeção de Fechamento", f"R$ {projecao:,.0f}", cor_proj)
-with row1[3]:
+    kpi("Projeção de Fechamento", f"R$ {money_br(projecao, com_centavos=False)}", cor_proj)
+with c4:
     cor_gap = PRIMARY if gap >= 0 else DANGER
-    kpi("Gap Projetado vs Meta", f"R$ {gap:,.0f}", cor_gap)
+    kpi("Gap Projetado vs Meta", f"R$ {money_br(gap, com_centavos=False)}", cor_gap)
 
-row2 = st.columns(4)
-with row2[0]:
-    kpi("Total D-1 (dia inteiro)", f"R$ {total_d1:,.0f}", "#FFFFFF")
-with row2[1]:
-    kpi("Desvio D-1 vs Meta", f"R$ {desvio_d1:,.0f}", PRIMARY if desvio_d1 >= 0 else DANGER)
-with row2[2]:
-    kpi("Total D-7 (dia inteiro)", f"R$ {total_d7:,.0f}", "#FFFFFF")
-with row2[3]:
-    kpi("Desvio D-7 vs Meta", f"R$ {desvio_d7:,.0f}", PRIMARY if desvio_d7 >= 0 else DANGER)
+c5, c6, c7, c8 = st.columns(4)
+with c5:
+    kpi("Total D-1 (dia inteiro)", f"R$ {money_br(total_d1, com_centavos=False)}", "#FFFFFF")
+with c6:
+    kpi("Desvio D-1 vs Meta", f"R$ {money_br(desvio_d1, com_centavos=False)}",
+        PRIMARY if desvio_d1 >= 0 else DANGER)
+with c7:
+    kpi("Total D-7 (dia inteiro)", f"R$ {money_br(total_d7, com_centavos=False)}", "#FFFFFF")
+with c8:
+    kpi("Desvio D-7 vs Meta", f"R$ {money_br(desvio_d7, com_centavos=False)}",
+        PRIMARY if desvio_d7 >= 0 else DANGER)
 
-row3 = st.columns(3)
-with row3[0]:
-    kpi("Ritmo vs D-1", f"{ritmo_vs_d1:,.2f}x", PRIMARY if ritmo_vs_d1 >= 1 else DANGER)
-with row3[1]:
-    kpi("Ritmo vs D-7", f"{ritmo_vs_d7:,.2f}x", PRIMARY if ritmo_vs_d7 >= 1 else DANGER)
-with row3[2]:
-    kpi("Dia já percorrido (histórico)", f"{percent_hist*100:,.1f}%", WARNING)
+c9, c10, c11 = st.columns(3)
+with c9:
+    kpi("Ritmo vs D-1", f"{ritmo_vs_d1:,.2f}x",
+        PRIMARY if ritmo_vs_d1 >= 1 else DANGER)
+with c10:
+    kpi("Ritmo vs D-7", f"{ritmo_vs_d7:,.2f}x",
+        PRIMARY if ritmo_vs_d7 >= 1 else DANGER)
+with c11:
+    kpi("Dia já percorrido (curva hist.)", f"{percent_hist*100:,.1f}%", WARNING)
 
 # ======================================================
 #                  INSIGHTS EXECUTIVOS
@@ -276,31 +289,49 @@ with row3[2]:
 
 st.markdown("### 🧠 Insights Estratégicos")
 
-if not exp_ritmo:
-    exp_ritmo = (
-        f"Até agora vendemos aproximadamente **R$ {venda_atual:,.0f}**, o que representa "
-        f"**{percent_hist*100:,.1f}%** da curva intradia histórica."
-    )
-if not exp_d1:
-    exp_d1 = (
-        f"No dia anterior (D-1) o dia fechou em **R$ {total_d1:,.0f}** "
-        f"frente a uma meta de **R$ {meta_d1:,.0f}** (**{desvio_d1:,.0f}** de desvio)."
-    )
-if not exp_d7:
-    exp_d7 = (
-        f"Há uma semana (D-7), o dia fechou em **R$ {total_d7:,.0f}** "
-        f"frente à meta de **R$ {meta_d7:,.0f}** (**{desvio_d7:,.0f}** de desvio)."
-    )
-
 st.info(
     f"""
-- {exp_ritmo}
-- {exp_d1}
-- {exp_d7}
+- {exp_ritmo}  
+- {exp_d1}  
+- {exp_d7}  
 - Ritmo atual vs D-1: **{ritmo_vs_d1:,.2f}x** • Ritmo atual vs D-7: **{ritmo_vs_d7:,.2f}x**  
-- Se o ritmo atual se mantiver, projetamos **R$ {projecao:,.0f}** no fechamento.
+- Se o ritmo atual se mantiver, o fechamento projetado é de **R$ {money_br(projecao, com_centavos=False)}**.
 """
 )
+
+# Caixa explicando a metodologia
+with st.expander("📘 Como funciona a projeção?"):
+    st.markdown(
+        """
+        **Metodologia do modelo de projeção FSJ Black Friday 2026**
+
+        1. **Curva intradia histórica**  
+           - Cada dia é dividido em slots de 15 minutos.  
+           - Para cada slot, calculamos quanto ele representa do total do dia.  
+           - A média desses percentuais gera a curva intradia histórica (*percentual_dia_hist / frac_hist*).
+
+        2. **Ritmo atual**  
+           - A venda acumulada até o último slot do dia é comparada com:  
+             - o mesmo horário de **ontem (D-1)**  
+             - o mesmo horário de **D-7**  
+             - a curva média do mês.  
+           - Isso gera indicadores de ritmo (ex.: 1,20x o ritmo de D-1).
+
+        3. **Projeção de fechamento**  
+           - Se já percorremos, por exemplo, 30% da curva intradia histórica,  
+             então a venda atual deveria representar ~30% do total esperado.  
+           - Fórmula básica:  
+             **projeção_dia ≈ venda_atual / percentual_dia_hist**
+
+        4. **Desvios e metas**  
+           - Gap projetado = projeção_dia – meta_dia.  
+           - Também comparamos o fechamento real de D-1 e D-7 contra suas metas.  
+
+        Essa abordagem permite enxergar não só o quanto já vendemos,
+        mas principalmente **a força do dia** e a **tendência de fechamento**
+        em tempo quase real.
+        """
+    )
 
 # ======================================================
 #                  CURVAS E HISTÓRICO DDT
@@ -308,37 +339,32 @@ st.info(
 
 st.markdown("### 📊 Curva Intradia – DDT por Slot (15 em 15 minutos)")
 
-# garantir que SLOT é string ordenável
 if "SLOT" in grid.columns:
-    grid = grid.sort_values("SLOT")
-    grid = grid.set_index("SLOT")
+    grid = grid.sort_values("SLOT").set_index("SLOT")
 
 col_curva1, col_curva2 = st.columns(2)
 
-# Curva de valor por slot
 with col_curva1:
     st.markdown("#### 💵 Venda por Slot (Hoje x D-1 x D-7 x Média Mês)")
     cols_valor = [c for c in ["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"] if c in grid.columns]
     if cols_valor:
         st.line_chart(grid[cols_valor])
     else:
-        st.warning("Colunas de valor por slot não encontradas em `saida_grid.csv`.")
+        st.warning("Colunas de valor por slot não encontradas em saida_grid.csv.")
 
-# Curva acumulada
 with col_curva2:
     st.markdown("#### 📈 Curva Acumulada (Hoje x D-1 x D-7 x Média Mês)")
     cols_acum = [c for c in ["acum_hoje", "acum_d1", "acum_d7", "acum_media_mes"] if c in grid.columns]
     if cols_acum:
         st.line_chart(grid[cols_acum])
     else:
-        st.warning("Colunas acumuladas não encontradas em `saida_grid.csv`.")
+        st.warning("Colunas acumuladas não encontradas em saida_grid.csv.")
 
 # ======================================================
 #                TABELA DETALHADA / EXPORT
 # ======================================================
 
 st.markdown("### 🧮 Tabela Detalhada – Slot a Slot")
-
 st.dataframe(grid.reset_index(), use_container_width=True)
 
 st.download_button(
