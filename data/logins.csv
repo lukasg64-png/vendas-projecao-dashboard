@@ -1,5 +1,4 @@
-usuario,senha
-farmacias_sao_joao,blackfriday2025
-lucas,1234
-gestao,9999
-comercial,00072025
+usuario,senha,nome
+lucas,1234,Lucas Alves
+farmacias_sao_joao,blackfriday2025,Time E-commerce
+admin,senha123,Administrador
