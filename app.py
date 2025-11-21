@@ -297,18 +297,24 @@ def painel_visao_geral(grid: pd.DataFrame, resumo: dict, user_name: str):
         )
 
     with c8:
-        texto_ritmo = (
-            f"vs D-1: {ritmo_d1:.2f}x • "
-            f"vs D-7: {ritmo_d7:.2f}x • "
-            f"vs média do mês: {ritmo_med:.2f}x"
-        )
-        kpi_card(
-            "Ritmo combinado",
-            "",
-            texto_ritmo,
-            color=PRIMARY if ritmo_d1 >= 1 and ritmo_d7 >= 1 else WARNING,
-            tooltip="Ritmos de venda comparando o acumulado de hoje com D-1, D-7 e média do mês.",
-        )
+    ritmo_combinado = (ritmo_d1 + ritmo_d7 + ritmo_med) / 3  # média simples
+
+    texto_ritmo = (
+        f"vs D-1: {fmt_number_br(ritmo_d1, 2)}x • "
+        f"vs D-7: {fmt_number_br(ritmo_d7, 2)}x • "
+        f"vs média do mês: {fmt_number_br(ritmo_med, 2)}x"
+    )
+
+    cor_ritmo = PRIMARY if ritmo_combinado >= 1 else WARNING
+
+    kpi_card(
+        "Ritmo combinado",
+        f"{fmt_number_br(ritmo_combinado, 2)}x",
+        texto_ritmo,
+        color=cor_ritmo,
+        tooltip="Média dos ritmos vs D-1, D-7 e média do mês. Acima de 1,00x indica aceleração."
+    )
+
 
     # --- Como interpretar o ritmo ---
     with st.expander("🧠 Como interpretar os ritmos", expanded=False):
