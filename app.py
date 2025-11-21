@@ -28,23 +28,15 @@ CARD_BG = "#111111"
 # =========================================================
 @st.cache_data
 def load_logins(path: Path) -> pd.DataFrame:
-    # Fallback se o arquivo não existir
     if not path.exists():
-        df = pd.DataFrame(
-            [
-                {
-                    "usuario": "farmacias_sao_joao",
-                    "senha": "blackfriday2025",
-                    "nome": "Time E-commerce",
-                }
-            ]
+        return pd.DataFrame(
+            [{"usuario": "farmacias_sao_joao",
+              "senha": "blackfriday2025",
+              "nome": "Time E-commerce"}]
         )
-        return df
-
     df = pd.read_csv(path, dtype=str)
     df = df.fillna("")
     return df
-
 
 def authenticate(username: str, password: str, df_logins: pd.DataFrame):
     row = df_logins[
@@ -52,51 +44,36 @@ def authenticate(username: str, password: str, df_logins: pd.DataFrame):
         (df_logins["senha"] == password)
     ]
     if not row.empty:
-        nome = row["nome"].iloc[0]
-        return True, nome
+        return True, row["nome"].iloc[0]
     return False, None
 
-
 def fmt_currency_br(x: float, decimals: int = 0) -> str:
-    if x is None:
-        return "-"
     try:
-        if np.isnan(x):
-            return "-"
-    except Exception:
-        pass
-    fmt = f"{x:,.{decimals}f}"
-    fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"R$ {fmt}"
-
+        fmt = f"{x:,.{decimals}f}"
+        fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {fmt}"
+    except:
+        return "-"
 
 def fmt_percent_br(x: float, decimals: int = 2) -> str:
-    if x is None:
-        return "-"
     try:
-        if np.isnan(x):
-            return "-"
-    except Exception:
-        pass
-    pct = x * 100
-    fmt = f"{pct:,.{decimals}f}"
-    fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"{fmt}%"
+        pct = x * 100
+        fmt = f"{pct:,.{decimals}f}"
+        fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"{fmt}%"
+    except:
+        return "-"
 
+def fmt_number_br(x: float, decimals: int = 2) -> str:
+    try:
+        fmt = f"{x:,.{decimals}f}"
+        fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
+        return fmt
+    except:
+        return "-"
 
-def kpi_card(
-    title: str,
-    value: str,
-    subtitle: str = "",
-    color: str = PRIMARY,
-    tooltip: str | None = None,
-):
-    info_html = ""
-    if tooltip:
-        info_html = (
-            f"<span style='margin-left:6px; cursor:help;' title='{tooltip}'>ℹ️</span>"
-        )
-
+def kpi_card(title, value, subtitle="", color=PRIMARY, tooltip=None):
+    info_html = f"<span style='margin-left:6px; cursor:help;' title='{tooltip}'>ℹ️</span>" if tooltip else ""
     html = f"""
     <div style="
         background:{CARD_BG};
@@ -119,12 +96,10 @@ def kpi_card(
     """
     st.markdown(html, unsafe_allow_html=True)
 
-
 # =========================================================
-# TELA DE LOGIN
+# LOGIN SCREEN
 # =========================================================
-def login_screen(df_logins: pd.DataFrame):
-    # Barra superior compacta
+def login_screen(df_logins):
     st.markdown(
         """
         <div style="
@@ -134,7 +109,7 @@ def login_screen(df_logins: pd.DataFrame):
             display:flex;
             align-items:center;
             justify-content:space-between;
-            margin-bottom:12px;
+            margin-bottom:10px;
         ">
             <div>
                 <div style="font-size:1.2rem;font-weight:700;color:#001B20;">
@@ -144,7 +119,7 @@ def login_screen(df_logins: pd.DataFrame):
                     Bem-vindo, São João! <b>Tem Black na São João? Tem Black na São João! 🔥</b>
                 </div>
             </div>
-            <div style="font-size:0.75rem;color:#012A30;background:rgba(255,255,255,0.85);
+            <div style="font-size:0.8rem;color:#012A30;background:rgba(255,255,255,0.8);
                         padding:6px 14px;border-radius:999px;">
                 Feito por: Planejamento e Dados E-Commerce
             </div>
@@ -153,388 +128,189 @@ def login_screen(df_logins: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
-    # Container central do login
-    login_col = st.columns([1, 1, 1])[1]
-    with login_col:
-        st.markdown(
-            """
-            <div style="font-size:1.05rem;font-weight:600;margin-bottom:8px;">
-                🔐 Acesse o painel
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    col = st.columns([1,2,1])[1]
+    with col:
+        st.markdown("### 🔐 Login")
+        username = st.text_input("Usuário")
+        password = st.text_input("Senha", type="password")
 
-        username = st.text_input("Usuário", key="login_user")
-        password = st.text_input("Senha", type="password", key="login_pwd")
-
-        if st.button("Entrar", type="primary", use_container_width=True):
+        if st.button("Entrar", use_container_width=True):
             ok, nome = authenticate(username.strip(), password.strip(), df_logins)
             if ok:
                 st.session_state["auth"] = True
-                st.session_state["user"] = username.strip()
-                st.session_state["user_name"] = nome
+                st.session_state["user"] = nome
                 st.rerun()
             else:
-                st.error(
-                    "Usuário ou senha inválidos. Confira os dados ou fale com o time de Dados."
-                )
-
-        st.caption("Dica: usuários são carregados do arquivo `data/logins.csv`.")
-
+                st.error("Usuário ou senha inválidos.")
 
 # =========================================================
-# CARREGAR DADOS PRINCIPAIS
+# LOAD DATA
 # =========================================================
 @st.cache_data
-def load_grid_and_resumo(grid_path: Path, resumo_path: Path):
+def load_grid_and_resumo(grid_path, resumo_path):
     grid = pd.read_csv(grid_path)
-    resumo_df = pd.read_csv(resumo_path)
-    resumo = resumo_df.iloc[0].to_dict()
+    resumo = pd.read_csv(resumo_path).iloc[0].to_dict()
     return grid, resumo
 
+# =========================================================
+# PAINEL 1 — VISÃO GERAL
+# =========================================================
+def painel_visao_geral(grid, resumo, user_name):
 
-# =========================================================
-# VISÃO GERAL (TAB 1)
-# =========================================================
-def painel_visao_geral(grid: pd.DataFrame, resumo: dict, user_name: str):
-    data_ref = pd.to_datetime(resumo["data_referencia"]).date()
-    meta_dia   = float(resumo["meta_dia"])
+    data_ref = resumo["data_referencia"]
+    meta_dia = float(resumo["meta_dia"])
     venda_atual = float(resumo["venda_atual_ate_slot"])
-    projecao   = float(resumo["projecao_dia"])
-    gap        = float(resumo["desvio_projecao"])
-    total_d1   = float(resumo["total_d1"])
-    total_d7   = float(resumo["total_d7"])
-    ritmo_d1   = float(resumo["ritmo_vs_d1"])
-    ritmo_d7   = float(resumo["ritmo_vs_d7"])
-    ritmo_med  = float(resumo["ritmo_vs_media"])
-    frac_hist  = float(resumo["percentual_dia_hist"])
-
-    perc_meta_real = venda_atual / meta_dia if meta_dia > 0 else 0.0
+    projecao = float(resumo["projecao_dia"])
+    gap = float(resumo["desvio_projecao"])
+    ritmo_d1 = float(resumo["ritmo_vs_d1"])
+    ritmo_d7 = float(resumo["ritmo_vs_d7"])
+    ritmo_med = float(resumo["ritmo_vs_media"])
+    total_d1 = float(resumo["total_d1"])
+    total_d7 = float(resumo["total_d7"])
+    frac_hist = float(resumo["percentual_dia_hist"])
 
     st.markdown(
-        f"""
-        <div style="margin-bottom:10px;font-size:0.9rem;color:#BBBBBB;">
-            Usuário: <b>{user_name}</b> • Data de referência: <b>{data_ref.strftime('%d/%m/%Y')}</b> • Canal: Site + App
-        </div>
-        """,
+        f"<div style='color:#BBB;margin-bottom:8px;'>Usuário: <b>{user_name}</b> • Data: <b>{data_ref}</b></div>",
         unsafe_allow_html=True,
     )
 
-    # --- KPIs linha 1 ---
-    c1, c2, c3, c4 = st.columns(4)
+    c1,c2,c3,c4 = st.columns(4)
 
     with c1:
-        kpi_card(
-            "Meta do dia",
-            fmt_currency_br(meta_dia),
-            "Meta consolidada Site + App para a data.",
-            color=PRIMARY,
-            tooltip="Meta financeira total do dia, considerando todos os canais digitais (site + app).",
-        )
+        kpi_card("Meta do dia", fmt_currency_br(meta_dia), tooltip="Meta consolidada Site + App.")
 
     with c2:
-        kpi_card(
-            "Venda atual",
-            fmt_currency_br(venda_atual),
-            f"Equivalente a {fmt_percent_br(perc_meta_real, 1)} da meta.",
-            color=PRIMARY if perc_meta_real >= frac_hist else WARNING,
-            tooltip="Faturamento realizado até o último slot de 15 minutos.",
-        )
+        perc_meta = venda_atual / meta_dia if meta_dia>0 else 0
+        kpi_card("Venda atual", fmt_currency_br(venda_atual),
+                 f"{fmt_percent_br(perc_meta,1)} da meta",
+                 color=PRIMARY if perc_meta>=frac_hist else WARNING)
 
     with c3:
-        kpi_card(
-            "Projeção de fechamento",
-            fmt_currency_br(projecao),
-            "Baseada na curva intradia histórica e no padrão do mês.",
-            color=WARNING if projecao < meta_dia else PRIMARY,
-            tooltip="Calculada projetando o faturamento atual pela fração histórica vendida até esse horário.",
-        )
+        kpi_card("Projeção do dia", fmt_currency_br(projecao),
+                 "Base histórica e ritmo atual",
+                 color=PRIMARY if projecao>=meta_dia else WARNING)
 
-    gap_label = "Acima da meta" if gap >= 0 else "Abaixo da meta"
-    gap_color = PRIMARY if gap >= 0 else DANGER
     with c4:
-        kpi_card(
-            "Gap projetado vs meta",
-            fmt_currency_br(gap),
-            f"{gap_label}.",
-            color=gap_color,
-            tooltip="Diferença entre a projeção de fechamento e a meta consolidada do dia.",
-        )
+        kpi_card("Gap projetado", fmt_currency_br(gap),
+                 "vs meta",
+                 color=PRIMARY if gap>=0 else DANGER)
 
     st.markdown("---")
 
-    # --- Ritmos & totais ---
-    st.subheader("📈 Ritmo do dia", divider="gray")
+    st.subheader("📈 Ritmo do Dia")
 
-    c5, c6, c7, c8 = st.columns(4)
+    c5,c6,c7,c8 = st.columns(4)
 
     with c5:
-        kpi_card(
-            "Total D-1 (dia inteiro)",
-            fmt_currency_br(total_d1),
-            "Faturamento total de ontem.",
-            color=PRIMARY,
-            tooltip="Fechamento consolidado do dia anterior (D-1).",
-        )
+        kpi_card("Total D-1", fmt_currency_br(total_d1))
 
     with c6:
-        kpi_card(
-            "Total D-7 (dia inteiro)",
-            fmt_currency_br(total_d7),
-            "Fechamento do mesmo dia da semana passada.",
-            color=PRIMARY,
-            tooltip="Fechamento consolidado de D-7 (mesmo dia da semana, semana anterior).",
-        )
+        kpi_card("Total D-7", fmt_currency_br(total_d7))
 
     with c7:
-        kpi_card(
-            "Dia já percorrido (histórico)",
-            fmt_percent_br(frac_hist, 1),
-            "Fraçao média do dia que costuma estar vendida nesse horário.",
-            color=WARNING,
-            tooltip="Percentual médio do dia já realizado, segundo a curva intradia histórica.",
-        )
+        kpi_card("Dia já percorrido", fmt_percent_br(frac_hist,1))
 
     with c8:
-    ritmo_combinado = (ritmo_d1 + ritmo_d7 + ritmo_med) / 3  # média simples
-
-    texto_ritmo = (
-        f"vs D-1: {fmt_number_br(ritmo_d1, 2)}x • "
-        f"vs D-7: {fmt_number_br(ritmo_d7, 2)}x • "
-        f"vs média do mês: {fmt_number_br(ritmo_med, 2)}x"
-    )
-
-    cor_ritmo = PRIMARY if ritmo_combinado >= 1 else WARNING
-
-    kpi_card(
-        "Ritmo combinado",
-        f"{fmt_number_br(ritmo_combinado, 2)}x",
-        texto_ritmo,
-        color=cor_ritmo,
-        tooltip="Média dos ritmos vs D-1, D-7 e média do mês. Acima de 1,00x indica aceleração."
-    )
-
-
-    # --- Como interpretar o ritmo ---
-    with st.expander("🧠 Como interpretar os ritmos", expanded=False):
-        st.markdown(
-            f"""
-            - **Ritmo vs D-1 ({ritmo_d1:.2f}x)** → quanto o acumulado de hoje está maior ou menor que o acumulado de ontem no mesmo horário.  
-            - **Ritmo vs D-7 ({ritmo_d7:.2f}x)** → comparação com o mesmo dia da semana passada.  
-            - **Ritmo vs média do mês ({ritmo_med:.2f}x)** → comparação com o comportamento médio do mês para este horário.  
-
-            Em geral:
-            - **acima de 1,00x** → estamos acelerados em relação à referência.  
-            - **abaixo de 1,00x** → estamos perdendo tração vs a referência.  
-            """
+        ritmo_combinado = (ritmo_d1 + ritmo_d7 + ritmo_med) / 3
+        texto_ritmo = (
+            f"vs D-1: {fmt_number_br(ritmo_d1)}x • "
+            f"vs D-7: {fmt_number_br(ritmo_d7)}x • "
+            f"vs média: {fmt_number_br(ritmo_med)}x"
+        )
+        cor_ritmo = PRIMARY if ritmo_combinado>=1 else WARNING
+        kpi_card(
+            "Ritmo combinado",
+            f"{fmt_number_br(ritmo_combinado)}x",
+            texto_ritmo,
+            color=cor_ritmo,
+            tooltip="Média dos ritmos vs D-1, D-7 e média mensal."
         )
 
-    # --- Análise executiva de projeção ---
-    st.subheader("📝 Análise executiva da projeção", divider="gray")
-
-    frac_txt = fmt_percent_br(frac_hist, 2)
-    st.markdown(
-        f"""
-        ### Como a projeção é construída
-
-        A projeção de fechamento usa um modelo em três camadas:
-
-        1. **Curva intradia histórica**  
-           - Para cada slot de 15 minutos, medimos que fração do faturamento diário costuma estar realizada ao longo do mês.  
-           - No horário atual, o padrão histórico indica que cerca de **{frac_txt}** do dia já deveria estar vendido.
-
-        2. **Base matemática da projeção**  
-           - Consideramos a venda acumulada de hoje até o último slot: **{fmt_currency_br(venda_atual)}**.  
-           - Dividimos esse valor pela fração histórica do horário: `venda_atual / frac_hist`.  
-           - Isso gera uma projeção de fechamento em torno de **{fmt_currency_br(projecao)}** para o dia.
-
-        3. **Camada de consistência por ritmo**  
-           - Em paralelo, monitoramos os ritmos:  
-             - **vs D-1:** {ritmo_d1:.2f}x  
-             - **vs D-7:** {ritmo_d7:.2f}x  
-             - **vs média do mês:** {ritmo_med:.2f}x  
-           - Ritmos acima de 1,00x sugerem aceleração; abaixo de 1,00x indicam perda de tração.  
-           - Eles funcionam como uma *checagem de consistência*: se o dia foge muito do padrão, isso aparece imediatamente nesses índices.
-
-        **Conclusão executiva**  
-        - Projetamos o fechamento em **{fmt_currency_br(projecao)}**, o que implica um gap de **{fmt_currency_br(gap)}** em relação à meta de **{fmt_currency_br(meta_dia)}**.  
-        """
-    )
-
-
 # =========================================================
-# CURVAS & RITMO (TAB 2)
+# PAINEL 2 — CURVAS E RITMOS
 # =========================================================
-def painel_curvas_ritmo(grid: pd.DataFrame, resumo: dict):
-    st.subheader("📊 Curvas de venda (DDT)", divider="gray")
+def painel_curvas_ritmo(grid, resumo):
+    st.subheader("📊 Curvas DDT")
 
-    fig_curvas = px.line(
+    fig = px.line(
         grid,
         x="SLOT",
-        y=["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"],
-        labels={"value": "Valor (R$)", "SLOT": "Horário", "variable": "Curva"},
+        y=["valor_hoje","valor_d1","valor_d7","valor_media_mes"],
+        labels={"value":"Valor (R$)","SLOT":"Horário"},
     )
-    fig_curvas.update_layout(
-        legend_title="Curva",
-        margin=dict(l=20, r=20, t=40, b=40),
-    )
-    st.plotly_chart(fig_curvas, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("📈 Ritmos ao longo do dia", divider="gray")
+    st.subheader("📈 Ritmos do Dia")
 
     projecao = float(resumo["projecao_dia"])
-    grid = grid.copy()
+    grid["perc_dia_realizado"] = grid["acum_hoje"] / projecao
 
-    if projecao > 0:
-        grid["perc_dia_realizado"] = grid["acum_hoje"] / projecao
-    else:
-        grid["perc_dia_realizado"] = 0.0
+    df_r = pd.DataFrame({
+        "SLOT":grid["SLOT"],
+        "Ritmo D-1":grid["ritmo_vs_d1"],
+        "Ritmo D-7":grid["ritmo_vs_d7"],
+        "Ritmo média":grid["ritmo_vs_media"],
+        "% realizado":grid["perc_dia_realizado"],
+    })
 
-    df_ritmo = pd.DataFrame(
-        {
-            "SLOT": grid["SLOT"],
-            "Ritmo vs D-1": grid["ritmo_vs_d1"],
-            "Ritmo vs D-7": grid["ritmo_vs_d7"],
-            "Ritmo vs média do mês": grid["ritmo_vs_media"],
-            "% do dia realizado": grid["perc_dia_realizado"],
-        }
-    )
+    fig2 = px.line(df_r, x="SLOT", y=df_r.columns[1:])
+    st.plotly_chart(fig2, use_container_width=True)
 
-    fig_ritmo = px.line(
-        df_ritmo,
-        x="SLOT",
-        y=[
-            "Ritmo vs D-1",
-            "Ritmo vs D-7",
-            "Ritmo vs média do mês",
-            "% do dia realizado",
-        ],
-        labels={"value": "Índice", "SLOT": "Horário", "variable": "Métrica"},
-    )
-    fig_ritmo.update_layout(
-        legend_title="Comparação",
-        margin=dict(l=20, r=20, t=40, b=40),
-    )
-    st.plotly_chart(fig_ritmo, use_container_width=True)
+    st.subheader("🔥 Heatmap")
 
-    st.caption(
-        """
-        - As três primeiras linhas são ritmos (x vezes a referência).  
-        - A linha “% do dia realizado” mostra o avanço do dia projetado (acumulado atual / projeção).
-        """
-    )
+    df_h = grid[["SLOT","valor_hoje","valor_d1","valor_d7","valor_media_mes"]]
+    df_m = df_h.melt(id_vars="SLOT", var_name="Dia", value_name="Valor")
+    matrix = df_m.pivot(index="Dia", columns="SLOT", values="Valor")
 
-    st.subheader("🔥 Mapa de calor – intensidade por horário", divider="gray")
-
-    df_heat = pd.DataFrame(
-        {
-            "SLOT": grid["SLOT"],
-            "Hoje": grid["valor_hoje"],
-            "D-1": grid["valor_d1"],
-            "D-7": grid["valor_d7"],
-            "Média do mês": grid["valor_media_mes"],
-        }
-    )
-
-    df_melt = df_heat.melt(id_vars="SLOT", var_name="Dia", value_name="Valor")
-    heat_matrix = df_melt.pivot(index="Dia", columns="SLOT", values="Valor")
-
-    fig_heat = px.imshow(
-        heat_matrix,
-        color_continuous_scale="Viridis",
-        aspect="auto",
-        labels={"color": "Vendas (R$)"},
-    )
-    fig_heat.update_layout(
-        margin=dict(l=40, r=40, t=40, b=40),
-    )
-    st.plotly_chart(fig_heat, use_container_width=True)
-
-    with st.expander("🧾 Tabela completa (slot a slot)", expanded=False):
-        st.dataframe(grid, use_container_width=True)
-
+    fig3 = px.imshow(matrix, color_continuous_scale="Viridis")
+    st.plotly_chart(fig3, use_container_width=True)
 
 # =========================================================
-# SIMULAÇÃO DE META (TAB 3)
+# PAINEL 3 — SIMULAÇÃO
 # =========================================================
-def painel_simulacao_meta(resumo: dict):
-    st.subheader("🎯 Simulação de meta e gap", divider="gray")
+def painel_simulacao_meta(resumo):
 
-    meta_atual   = float(resumo["meta_dia"])
-    projecao     = float(resumo["projecao_dia"])
-    venda_atual  = float(resumo["venda_atual_ate_slot"])
+    st.subheader("🎯 Simulação de Meta")
 
-    st.write(
-        "Use o controle abaixo para testar diferentes metas e ver o novo gap projetado."
-    )
+    meta_atual = float(resumo["meta_dia"])
+    projecao = float(resumo["projecao_dia"])
+    venda_atual = float(resumo["venda_atual_ate_slot"])
 
     nova_meta = st.slider(
-        "Meta simulada (R$)",
-        min_value=int(meta_atual * 0.5),
-        max_value=int(meta_atual * 1.5),
-        value=int(meta_atual),
-        step=50000,
-        format="%d",
+        "Nova Meta",
+        int(meta_atual*0.5),
+        int(meta_atual*1.5),
+        int(meta_atual),
+        step=50000
     )
 
-    gap_sim = projecao - nova_meta
-    perc_cobertura = projecao / nova_meta if nova_meta > 0 else 0
-    perc_real = venda_atual / nova_meta if nova_meta > 0 else 0
+    gap = projecao - nova_meta
+    perc_cobertura = projecao/nova_meta if nova_meta>0 else 0
 
-    c1, c2, c3 = st.columns(3)
-
+    c1,c2,c3 = st.columns(3)
     with c1:
-        kpi_card(
-            "Meta atual (oficial)",
-            fmt_currency_br(meta_atual),
-            "Meta consolidada carregada do arquivo de metas.",
-            color=PRIMARY,
-        )
+        kpi_card("Meta atual", fmt_currency_br(meta_atual))
     with c2:
-        kpi_card(
-            "Meta simulada",
-            fmt_currency_br(nova_meta),
-            "Valor usado para calcular o gap projetado.",
-            color=WARNING,
-        )
+        kpi_card("Meta simulada", fmt_currency_br(nova_meta), color=WARNING)
     with c3:
-        cor_gap = PRIMARY if gap_sim >= 0 else DANGER
-        kpi_card(
-            "Gap simulado vs projeção",
-            fmt_currency_br(gap_sim),
-            f"Cobertura estimada de {fmt_percent_br(perc_cobertura,1)} da meta simulada.",
-            color=cor_gap,
-        )
-
-    st.markdown(
-        f"""
-        - Com a meta simulada em **{fmt_currency_br(nova_meta)}**, a projeção de **{fmt_currency_br(projecao)}**
-          gera um gap de **{fmt_currency_br(gap_sim)}**.  
-        - A venda atual é **{fmt_currency_br(venda_atual)}**, o que já cobre
-          **{fmt_percent_br(perc_real,1)}** da meta simulada.
-        """
-    )
-
+        kpi_card("Gap simulado", fmt_currency_br(gap),
+                 fmt_percent_br(perc_cobertura,1),
+                 color=PRIMARY if gap>=0 else DANGER)
 
 # =========================================================
 # MAIN
 # =========================================================
 def main():
+
     df_logins = load_logins(LOGINS_PATH)
 
     if "auth" not in st.session_state:
         st.session_state["auth"] = False
 
-    # Se não autenticado, mostra tela de login
     if not st.session_state["auth"]:
         login_screen(df_logins)
         return
 
-    # Usuário autenticado → carrega dados do painel
-    user_name = st.session_state.get("user_name", st.session_state.get("user", ""))
-
-    # Barra superior do painel
     st.markdown(
         """
         <div style="
@@ -542,34 +318,27 @@ def main():
             border-radius:14px;
             background:linear-gradient(90deg,#00E676,#00B0FF);
             display:flex;
-            align-items:center;
             justify-content:space-between;
-            margin-bottom:16px;
+            margin-bottom:15px;
         ">
             <div>
                 <div style="font-size:1.2rem;font-weight:700;color:#001B20;">
-                    Painel Executivo – FSJ Black Friday (Site + App)
+                    Painel Executivo – FSJ Black Friday
                 </div>
                 <div style="font-size:0.85rem;color:#012A30;margin-top:4px;">
-                    Monitor de projeção diária, ritmo intradia e comparativos com D-1, D-7 e média do mês.
+                    Monitor de projeção diária e ritmos intradia.
                 </div>
             </div>
-            <div style="font-size:0.75rem;color:#012A30;background:rgba(255,255,255,0.85);
-                        padding:6px 14px;border-radius:999px;">
-                Feito por: Planejamento e Dados E-Commerce
-            </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """, unsafe_allow_html=True
     )
 
-    # Carregar dados
     grid, resumo = load_grid_and_resumo(GRID_PATH, RESUMO_PATH)
 
-    aba1, aba2, aba3 = st.tabs(["Visão Geral", "Curvas & Ritmo", "Simulação de Meta"])
+    aba1, aba2, aba3 = st.tabs(["Visão Geral","Curvas & Ritmo","Simulação"])
 
     with aba1:
-        painel_visao_geral(grid, resumo, user_name)
+        painel_visao_geral(grid, resumo, st.session_state["user"])
 
     with aba2:
         painel_curvas_ritmo(grid, resumo)
