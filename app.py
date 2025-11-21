@@ -1,767 +1,628 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
-from datetime import datetime
 
 # ======================================================
-#                 CONFIGURAÇÃO BÁSICA
+# CONFIGURAÇÃO BÁSICA DA PÁGINA
 # ======================================================
 st.set_page_config(
-    page_title="FSJ Black Friday 2026 – Projeção de Vendas",
+    page_title="📈 FSJ – Painel Black Friday",
     layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
-# Paleta
-PRIMARY = "#00C853"   # verde
-DANGER  = "#FF1744"   # vermelho
-WARNING = "#FFC400"   # amarelo
-CARD_BG = "#111111"
-
-# CSS geral
-st.markdown(
-    f"""
-    <style>
-    body {{
-        background-color: #000000;
-        color: #FFFFFF;
-        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }}
-
-    .main .block-container {{
-        padding-top: 0.8rem;
-        padding-bottom: 2rem;
-        max-width: 1400px;
-    }}
-
-    .fsj-header {{
-        background: linear-gradient(90deg, #00C853 0%, #004D40 100%);
-        padding: 0.7rem 1.2rem;
-        border-radius: 0.8rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #FFFFFF;
-        margin-bottom: 1rem;
-    }}
-
-    .fsj-header-title {{
-        font-size: 1.3rem;
-        font-weight: 700;
-    }}
-
-    .fsj-header-sub {{
-        font-size: 0.82rem;
-        opacity: 0.9;
-    }}
-
-    .fsj-badge {{
-        background-color: rgba(0,0,0,0.2);
-        padding: 0.25rem 0.7rem;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        white-space: nowrap;
-    }}
-
-    .kpi-card {{
-        background-color: {CARD_BG};
-        border-radius: 0.8rem;
-        padding: 0.9rem 1rem;
-        border: 1px solid #222;
-        height: 100%;
-    }}
-
-    .kpi-title {{
-        font-size: 0.8rem;
-        color: #CCCCCC;
-        margin-bottom: 0.25rem;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-    }}
-
-    .kpi-value {{
-        font-size: 1.5rem;
-        font-weight: 700;
-        margin-bottom: 0.15rem;
-    }}
-
-    .kpi-sub {{
-        font-size: 0.75rem;
-        color: #999999;
-    }}
-
-    .kpi-tooltip {{
-        font-size: 0.72rem;
-        color: #AAAAAA;
-        margin-top: 0.2rem;
-    }}
-
-    .insights-box {{
-        background-color: #051018;
-        border-radius: 0.8rem;
-        padding: 0.9rem 1rem;
-        border: 1px solid #102533;
-        font-size: 0.9rem;
-        line-height: 1.55;
-    }}
-
-    .section-title {{
-        font-size: 1.05rem;
-        font-weight: 700;
-        margin-top: 0.8rem;
-        margin-bottom: 0.4rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }}
-    </style>
-    """,
-    unsafe_allow_html=True,
+    initial_sidebar_state="collapsed"
 )
 
 # ======================================================
-#                 FORMATADORES
+# ESTILOS GERAIS (CSS)
 # ======================================================
-def fmt_num_br(valor: float, casas: int = 0) -> str:
-    if pd.isna(valor):
-        return "-"
-    fmt = f"{valor:,.{casas}f}"
-    fmt = fmt.replace(",", "X").replace(".", ",").replace("X", ".")
-    return fmt
+CUSTOM_CSS = """
+<style>
+/* Fundo geral escuro */
+.stApp {
+    background: #020b0f;
+    color: #f5f5f5;
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
-def fmt_moeda(valor: float, casas: int = 0) -> str:
-    if pd.isna(valor):
-        return "-"
-    return f"R$ {fmt_num_br(valor, casas)}"
+/* Esconder menu e footer do Streamlit para deixar mais clean */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
 
-def fmt_percent(frac: float, casas: int = 1) -> str:
-    if pd.isna(frac):
-        return "-"
-    return f"{fmt_num_br(frac * 100, casas)}%"
+/* Tela de login - container central */
+.login-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
 
+/* Card de login */
+.login-card {
+    background: radial-gradient(circle at top left, #00c85333, #000000dd);
+    border-radius: 18px;
+    padding: 26px 26px 22px 26px;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 0 25px rgba(0,0,0,0.6);
+    border: 1px solid #00c85355;
+}
+
+/* Título principal FSJ */
+.logo-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #ffffff;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.2rem;
+}
+
+/* Slogan animado */
+.slogan {
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-align: center;
+    color: #00e676;
+    margin-bottom: 1.0rem;
+    animation: pulseGlow 2.2s infinite;
+}
+
+/* Animação do slogan */
+@keyframes pulseGlow {
+    0%   { text-shadow: 0 0 4px #00e676, 0 0 8px #00e676; }
+    50%  { text-shadow: 0 0 14px #00e676, 0 0 26px #00e676; }
+    100% { text-shadow: 0 0 4px #00e676, 0 0 8px #00e676; }
+}
+
+/* Subtítulo login */
+.login-subtitle {
+    font-size: 0.9rem;
+    text-align: center;
+    color: #cfd8dc;
+    margin-bottom: 1.4rem;
+}
+
+/* Assinatura rodapé login */
+.login-footer {
+    font-size: 0.75rem;
+    text-align: center;
+    color: #90a4ae;
+    margin-top: 1.2rem;
+}
+
+/* Botão estilizado */
+.stButton > button {
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid #00c853;
+    background: linear-gradient(90deg, #00c853, #64dd17);
+    color: #000;
+    font-weight: 600;
+    box-shadow: 0 0 12px #00c85388;
+}
+
+/* Cartão KPI */
+.kpi-card {
+    background: linear-gradient(145deg, #071018, #02070b);
+    border-radius: 16px;
+    padding: 14px 16px 12px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 0 18px rgba(0,0,0,0.55);
+}
+
+/* Título KPI */
+.kpi-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: #b0bec5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Valor KPI principal */
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-top: 4px;
+}
+
+/* Subtext KPI */
+.kpi-sub {
+    font-size: 0.8rem;
+    color: #90a4ae;
+    margin-top: 4px;
+}
+
+/* Badge tonal */
+.badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.70rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+/* Tooltip simples via title */
+.kpi-help {
+    font-size: 0.9rem;
+    margin-left: 6px;
+    cursor: help;
+}
+
+/* Caixa de texto explicativa */
+.text-card {
+    background: #020b10;
+    border-radius: 12px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Tabs cabeça mais destacada */
+.stTabs [role="tablist"] {
+    gap: 8px;
+}
+
+.stTabs [role="tab"] {
+    padding: 8px 16px !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+}
+
+/* Título principal após login */
+.main-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.1rem;
+}
+
+.main-subtitle {
+    font-size: 0.95rem;
+    color: #90a4ae;
+    margin-bottom: 0.8rem;
+}
+</style>
+"""
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # ======================================================
-#                 LOGIN (data/logins.csv)
+# HELPERS – FORMATAÇÃO E CARDS
 # ======================================================
-def autenticar_usuario(usuario: str, senha: str):
+
+def format_moeda_br(v):
     try:
-        df_users = pd.read_csv("data/logins.csv")
-    except Exception:
-        return None
+        v = float(v)
+    except (TypeError, ValueError):
+        return "R$ 0,00"
+    s = f"{v:,.0f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {s}"
 
-    df_users.columns = [c.strip().lower() for c in df_users.columns]
-    for col in ["usuario", "senha"]:
-        if col not in df_users.columns:
-            return None
+def format_num_br(v, decimais=2):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return "-"
+    s = f"{v:,.{decimais}f}"
+    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+    return s
 
-    linha = df_users[
-        (df_users["usuario"].astype(str) == str(usuario)) &
-        (df_users["senha"].astype(str) == str(senha))
-    ]
+def kpi_card(titulo, valor, subtitulo="", cor="#00e676", help_text=None, badge_text=None, badge_color="#37474f"):
+    """
+    Renderiza um card KPI bonito usando HTML/CSS.
+    """
+    help_html = ""
+    if help_text:
+        help_html = f"<span class='kpi-help' title='{help_text}'>ℹ</span>"
 
-    if linha.empty:
-        return None
+    badge_html = ""
+    if badge_text:
+        badge_html = f"<span class='badge' style='background:{badge_color}; color:#eceff1;'>{badge_text}</span>"
 
-    nome = linha.iloc[0]["nome"] if "nome" in df_users.columns else usuario
-    return str(nome)
-
-
-if "auth" not in st.session_state:
-    st.session_state["auth"] = False
-if "nome_usuario" not in st.session_state:
-    st.session_state["nome_usuario"] = None
-
-if not st.session_state["auth"]:
-    st.markdown(
-        """
-        <div class="fsj-header">
-            <div>
-                <div class="fsj-header-title">📈 FSJ Black Friday 2026 – Projeção de Vendas (Site + App)</div>
-                <div class="fsj-header-sub">Acesso restrito • Faça login para visualizar o painel executivo.</div>
-            </div>
-            <div class="fsj-badge">Feito por: Planejamento e Dados E-Commerce</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("### 🔐 Login")
-    with st.form("login_form"):
-        col_l, col_r = st.columns([1, 1])
-        with col_l:
-            user = st.text_input("Usuário")
-        with col_r:
-            pwd = st.text_input("Senha", type="password")
-        entrar = st.form_submit_button("Entrar")
-
-        if entrar:
-            nome = autenticar_usuario(user, pwd)
-            if nome is None:
-                st.error("Usuário ou senha inválidos. Verifique o arquivo `data/logins.csv`.")
-            else:
-                st.session_state["auth"] = True
-                st.session_state["nome_usuario"] = nome
-                st.rerun()
-
-    if not st.session_state["auth"]:
-        st.stop()
-
-
-# ======================================================
-#                 CARREGAR BASES (grid + resumo)
-# ======================================================
-try:
-    grid = pd.read_csv("data/saida_grid.csv")
-    resumo_df = pd.read_csv("data/saida_resumo.csv")
-except Exception as e:
-    st.error(f"Erro ao carregar arquivos `saida_grid.csv` ou `saida_resumo.csv`: {e}")
-    st.stop()
-
-if resumo_df.empty:
-    st.error("Arquivo `saida_resumo.csv` está vazio.")
-    st.stop()
-
-r = resumo_df.iloc[0]
-
-data_ref_str = str(r.get("data_referencia", ""))
-try:
-    data_ref = pd.to_datetime(data_ref_str).date()
-except Exception:
-    data_ref = data_ref_str
-
-meta_dia     = float(r.get("meta_dia", np.nan))
-venda_atual  = float(r.get("venda_atual_ate_slot", np.nan))
-frac_hist    = float(r.get("percentual_dia_hist", np.nan))
-projecao     = float(r.get("projecao_dia", np.nan))
-gap_proj     = float(r.get("desvio_projecao", np.nan))
-total_d1     = float(r.get("total_d1", np.nan))
-total_d7     = float(r.get("total_d7", np.nan))
-ritmo_d1     = float(r.get("ritmo_vs_d1", np.nan))
-ritmo_d7     = float(r.get("ritmo_vs_d7", np.nan))
-ritmo_media  = float(r.get("ritmo_vs_media", np.nan))
-
-exp_ritmo = r.get("explicacao_ritmo", "")
-exp_d1    = r.get("explicacao_d1", "")
-exp_d7    = r.get("explicacao_d7", "")
-
-# meta-alvo intradia pra "estar em dia" com a meta
-venda_esperada_horario = meta_dia * frac_hist if not pd.isna(meta_dia) and not pd.isna(frac_hist) else np.nan
-indice_adherencia_meta = venda_atual / venda_esperada_horario if venda_esperada_horario and venda_esperada_horario != 0 else np.nan
-
-# ======================================================
-#                 HEADER DO PAINEL (logado)
-# ======================================================
-st.markdown(
-    f"""
-    <div class="fsj-header">
-        <div>
-            <div class="fsj-header-title">📈 FSJ Black Friday 2026 – Projeção de Vendas (Site + App)</div>
-            <div class="fsj-header-sub">
-                Usuário: <b>{st.session_state['nome_usuario']}</b> • 
-                Data de referência: <b>{data_ref}</b>
-            </div>
-        </div>
-        <div class="fsj-badge">Feito por: Planejamento e Dados E-Commerce</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ======================================================
-#                 FUNÇÕES DE UI
-# ======================================================
-def kpi_card(title: str, value_html: str, sub: str = "", tooltip: str = "", color_border: str = "#222222"):
-    extra = f"border-color:{color_border};" if color_border else ""
     html = f"""
-    <div class="kpi-card" style="{extra}">
-        <div class="kpi-title">{title}</div>
-        <div class="kpi-value">{value_html}</div>
-        <div class="kpi-sub">{sub}</div>
-        {f'<div class="kpi-tooltip">ℹ️ {tooltip}</div>' if tooltip else ''}
+    <div class="kpi-card">
+        <div class="kpi-title">
+            <span>{titulo}</span>
+            <span>{badge_html}{help_html}</span>
+        </div>
+        <div class="kpi-value" style="color:{cor};">
+            {valor}
+        </div>
+        <div class="kpi-sub">
+            {subtitulo}
+        </div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
 
+# ======================================================
+# LOGIN – COM SLOGAN “TEM BLACK NA SÃO JOÃO?”
+# ======================================================
 
-# ======================================================
-#     PREPARO DE DADOS PARA GRÁFICOS E FAIXAS HORÁRIAS
-# ======================================================
-# 1) Curvas de valor por slot
-grid_curvas = grid.copy()
-rename_map = {
-    "valor_hoje": "Hoje",
-    "valor_d1": "D-1",
-    "valor_d7": "D-7",
-    "valor_media_mes": "Média do mês"
+# Usuários simples em memória (pode expandir depois)
+USERS = {
+    "lucas": "black2025",
+    "fsj": "blackfriday2025",
+    "farmacias": "temblack"
 }
-grid_curvas = grid_curvas.rename(columns=rename_map)
 
-curvas_long = grid_curvas.melt(
-    id_vars="SLOT",
-    value_vars=list(rename_map.values()),
-    var_name="Série",
-    value_name="Valor"
-)
+def login_screen():
+    with st.container():
+        st.markdown("<div class='login-container'>", unsafe_allow_html=True)
 
-# 2) Acumulado vs histórico
-acum_cols = {
-    "acum_hoje": "Hoje acumulado",
-    "acum_d1": "D-1 acumulado",
-    "acum_d7": "D-7 acumulado",
-    "acum_media_mes": "Média acumulada"
-}
-grid_acum = grid.rename(columns=acum_cols)
+        st.markdown(
+            """
+            <div class='login-card'>
+                <div class='logo-title'>FARMÁCIAS SÃO JOÃO</div>
+                <div class='slogan'>Tem Black na São João? Tem Black na São João.</div>
+                <div class='login-subtitle'>
+                    Acesso ao painel executivo de projeção de vendas<br>
+                    <span style="color:#b0bec5;">Site + App • Black Friday</span>
+                </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-acum_long = grid_acum.melt(
-    id_vars="SLOT",
-    value_vars=list(acum_cols.values()),
-    var_name="Série",
-    value_name="Valor acumulado"
-)
+        user = st.text_input("Usuário", key="login_user")
+        pwd = st.text_input("Senha", type="password", key="login_pwd")
 
-# 3) Ritmos por slot
-ritmo_cols = {
-    "ritmo_vs_d1": "Ritmo vs D-1",
-    "ritmo_vs_d7": "Ritmo vs D-7",
-    "ritmo_vs_media": "Ritmo vs média"
-}
-grid_ritmo = grid.rename(columns=ritmo_cols)
+        col_btn, _ = st.columns([2, 1])
+        with col_btn:
+            if st.button("Entrar no painel"):
+                if user in USERS and USERS[user] == pwd:
+                    st.session_state["auth"] = True
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha inválidos.")
 
-ritmo_long = grid_ritmo.melt(
-    id_vars="SLOT",
-    value_vars=list(ritmo_cols.values()),
-    var_name="Série",
-    value_name="Ritmo"
-)
+        st.markdown(
+            """
+                <div class='login-footer'>
+                    Feito por: Planejamento & Dados – E-commerce FSJ<br>
+                    Versão Black Friday
+                </div>
+            </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-# 4) Faixas horárias (0–6, 6–12, 12–20, 20–24)
-grid_faixas = grid.copy()
-grid_faixas["HORA"] = grid_faixas["SLOT"].str.slice(0, 2).astype(int)
+# Inicializar sessão de auth
+if "auth" not in st.session_state:
+    st.session_state["auth"] = False
 
-def rotulo_faixa(hora: int) -> str:
-    if 0 <= hora < 6:
-        return "Madrugada (00h–06h)"
-    elif 6 <= hora < 12:
-        return "Manhã (06h–12h)"
-    elif 12 <= hora < 20:
-        return "Prime Time (12h–20h)"
-    else:
-        return "Late Night (20h–24h)"
-
-grid_faixas["FAIXA"] = grid_faixas["HORA"].apply(rotulo_faixa)
-
-# sumarizar por faixa
-faixas_resumo = (
-    grid_faixas
-    .groupby("FAIXA")
-    .agg({
-        "valor_hoje": "sum",
-        "valor_d1": "sum",
-        "valor_d7": "sum",
-        "valor_media_mes": "sum"
-    })
-    .reset_index()
-)
+if not st.session_state["auth"]:
+    login_screen()
+    st.stop()
 
 # ======================================================
-#                 ABAS PRINCIPAIS
+# CARREGAR ARQUIVOS CSV (SAÍDAS DO COLAB)
 # ======================================================
-tab_dash, tab_sim, tab_faixas, tab_sobre = st.tabs(
-    ["📊 Dashboard Executivo", "🎯 Simulações de Meta", "⏱️ Análise por Faixa Horária", "ℹ️ Sobre o Modelo"]
+
+@st.cache_data
+def load_data():
+    # Ajuste o caminho se necessário (ex: "saida_grid.csv")
+    grid = pd.read_csv("data/saida_grid.csv")
+    resumo = pd.read_csv("data/saida_resumo.csv")
+    return grid, resumo
+
+df_grid, df_resumo = load_data()
+
+# Garantir que temos uma linha de resumo
+if df_resumo.empty:
+    st.error("Arquivo 'saida_resumo.csv' está vazio. Gere a saída no Colab e faça upload novamente.")
+    st.stop()
+
+res = df_resumo.iloc[0]
+
+# Extrair métricas principais
+meta_dia       = res.get("meta_dia", 0.0)
+venda_atual    = res.get("venda_atual_ate_slot", 0.0)
+projecao_dia   = res.get("projecao_dia", 0.0)
+desvio_proj    = res.get("desvio_projecao", 0.0)
+total_d1       = res.get("total_d1", 0.0)
+total_d7       = res.get("total_d7", 0.0)
+ritmo_d1       = res.get("ritmo_vs_d1", 0.0)
+ritmo_d7       = res.get("ritmo_vs_d7", 0.0)
+ritmo_media    = res.get("ritmo_vs_media", 0.0)
+frac_hist      = res.get("percentual_dia_hist", 0.0)
+data_ref       = res.get("data_referencia", "")
+
+exp_ritmo      = res.get("explicacao_ritmo", "")
+exp_d1         = res.get("explicacao_d1", "")
+exp_d7         = res.get("explicacao_d7", "")
+
+# Pequenos status
+atinge_meta = projecao_dia >= meta_dia
+cor_gap = "#00e676" if desvio_proj >= 0 else "#ff1744"
+badge_status = "acima da meta" if atinge_meta else "abaixo da meta"
+badge_cor = "#1b5e20" if atinge_meta else "#b71c1c"
+
+# ======================================================
+# LAYOUT PRINCIPAL – TABS
+# ======================================================
+
+st.markdown(
+    f"""
+    <div class="main-title">📈 Painel Executivo – FSJ Black Friday</div>
+    <div class="main-subtitle">
+        Data de referência: <b>{data_ref}</b> • Canal: Site + App
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
-# ======================================================
-#                 ABA 1 – DASHBOARD EXECUTIVO
-# ======================================================
-with tab_dash:
-    st.markdown('<div class="section-title">🎯 Visão Geral do Dia</div>', unsafe_allow_html=True)
+tab1, tab2, tab3 = st.tabs(["Visão Geral", "Curvas & Ritmo", "Simulação de Meta"])
 
-    # Linha 1 – visão macro
-    row1 = st.columns(4)
-    with row1[0]:
+# ======================================================
+# TAB 1 – VISÃO GERAL
+# ======================================================
+with tab1:
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
         kpi_card(
             "Meta do dia",
-            f"<span style='color:{PRIMARY};'>{fmt_moeda(meta_dia)}</span>",
-            sub="Meta consolidada Site + App",
-            tooltip="Meta total do dia para os canais digitais."
+            format_moeda_br(meta_dia),
+            subtitulo="Meta consolidada Site + App para a data.",
+            cor="#00e676",
+            help_text="Meta diária total (site + app) definida para o dia de referência."
         )
-    with row1[1]:
+
+    with col2:
         kpi_card(
             "Venda atual",
-            f"<span style='color:{PRIMARY if venda_atual >= 0 else DANGER};'>{fmt_moeda(venda_atual)}</span>",
-            sub="Até o último slot processado.",
-            tooltip="Venda acumulada até o horário mais recente da base."
+            format_moeda_br(venda_atual),
+            subtitulo=f"Equivale a {format_num_br(frac_hist*100,1)}% da curva histórica intradia.",
+            cor="#29b6f6",
+            help_text="Faturamento acumulado até o último slot de 15 minutos disponível."
         )
-    with row1[2]:
+
+    with col3:
         kpi_card(
             "Projeção de fechamento",
-            f"<span style='color:{PRIMARY if projecao >= meta_dia else DANGER};'>{fmt_moeda(projecao)}</span>",
-            sub="Modelo intradia + consistência de ritmo.",
-            tooltip="Estimativa de fechamento para o dia com base na curva histórica e venda atual."
-        )
-    with row1[3]:
-        kpi_card(
-            "Gap projetado vs meta",
-            f"<span style='color:{PRIMARY if gap_proj >= 0 else DANGER};'>{fmt_moeda(gap_proj)}</span>",
-            sub="Projeção - meta do dia.",
-            tooltip="Se positivo, tendência de superar a meta; se negativo, tendência de fechar abaixo."
+            format_moeda_br(projecao_dia),
+            subtitulo="Calculada usando a curva intradia histórica e o ritmo atual.",
+            cor="#ffa726" if not atinge_meta else "#00e676",
+            help_text="Venda atual dividida pela fração histórica do dia no horário atual."
         )
 
-    # Linha 2 – comparativos
-    row2 = st.columns(4)
-    with row2[0]:
+    with col4:
         kpi_card(
-            "Total D-1 (dia inteiro)",
-            f"<span>{fmt_moeda(total_d1)}</span>",
-            sub="Ontem (D-1).",
-            tooltip=exp_d1 if isinstance(exp_d1, str) else ""
+            "Gap projetado",
+            format_moeda_br(desvio_proj),
+            subtitulo="Diferença entre projeção e meta consolidada.",
+            cor=cor_gap,
+            help_text="Se positivo, projetamos superar a meta. Se negativo, projetamos ficar abaixo.",
+            badge_text=badge_status,
+            badge_color=badge_cor
         )
-    with row2[1]:
-        kpi_card(
-            "Total D-7 (dia inteiro)",
-            f"<span>{fmt_moeda(total_d7)}</span>",
-            sub="Mesmo dia da semana passada (D-7).",
-            tooltip=exp_d7 if isinstance(exp_d7, str) else ""
-        )
-    with row2[2]:
-        cor_ritmo_d1 = PRIMARY if ritmo_d1 >= 1 else DANGER
-        seta_d1 = "🔺" if ritmo_d1 >= 1.05 else ("🔻" if ritmo_d1 <= 0.95 else "➖")
+
+    st.markdown("---")
+
+    # Linha de KPIs de ritmo
+    st.markdown("### 🔄 Ritmo do dia")
+
+    colr1, colr2, colr3 = st.columns(3)
+
+    with colr1:
         kpi_card(
             "Ritmo vs D-1",
-            f"<span style='color:{cor_ritmo_d1};'>{fmt_num_br(ritmo_d1, 2)}x {seta_d1}</span>",
-            sub="> 1,00x = acima de ontem.",
-            tooltip="Compara a venda acumulada de hoje com a de ontem no mesmo horário."
+            f"{format_num_br(ritmo_d1, 2)}x",
+            subtitulo="> 1,00 indica que hoje estamos na frente de ontem no mesmo horário.",
+            cor="#81c784",
+            help_text="Venda acumulada hoje / venda acumulada ontem no mesmo slot."
         )
-    with row2[3]:
-        cor_ritmo_d7 = PRIMARY if ritmo_d7 >= 1 else DANGER
-        seta_d7 = "🔺" if ritmo_d7 >= 1.05 else ("🔻" if ritmo_d7 <= 0.95 else "➖")
+    with colr2:
         kpi_card(
             "Ritmo vs D-7",
-            f"<span style='color:{cor_ritmo_d7};'>{fmt_num_br(ritmo_d7, 2)}x {seta_d7}</span>",
-            sub="> 1,00x = acima da semana passada.",
-            tooltip="Compara a venda de hoje com a do mesmo dia da semana anterior."
+            f"{format_num_br(ritmo_d7, 2)}x",
+            subtitulo="Comparação direta com o mesmo dia da semana passada.",
+            cor="#ba68c8",
+            help_text="Venda acumulada hoje / venda acumulada do D-7 no mesmo slot."
         )
-
-    # Linha 3 – aderência de meta e ritmo médio
-    row3 = st.columns(4)
-    with row3[0]:
-        cor_ritmo_med = PRIMARY if ritmo_media >= 1 else DANGER
-        seta_med = "🔺" if ritmo_media >= 1.05 else ("🔻" if ritmo_media <= 0.95 else "➖")
+    with colr3:
         kpi_card(
             "Ritmo vs média do mês",
-            f"<span style='color:{cor_ritmo_med};'>{fmt_num_br(ritmo_media, 2)}x {seta_med}</span>",
-            sub="> 1,00x = acima da média intradia.",
-            tooltip="Indica se o dia está acima ou abaixo do comportamento médio do mês."
-        )
-    with row3[1]:
-        kpi_card(
-            "Dia já percorrido (curva hist.)",
-            f"<span style='color:{WARNING};'>{fmt_percent(frac_hist, 2)}</span>",
-            sub="Fatia média do dia já realizada nesse horário.",
-            tooltip="Percentual médio do faturamento diário que, historicamente, já aconteceu até este slot."
-        )
-    with row3[2]:
-        kpi_card(
-            "Venda esperada neste horário",
-            f"<span>{fmt_moeda(venda_esperada_horario)}</span>",
-            sub="Para estar em linha com a meta.",
-            tooltip="Quanto deveríamos ter vendido até agora para estar 'on track' com a meta do dia."
-        )
-    with row3[3]:
-        cor_idx = PRIMARY if indice_adherencia_meta >= 1 else DANGER
-        seta_idx = "🔺" if indice_adherencia_meta >= 1.05 else ("🔻" if indice_adherencia_meta <= 0.95 else "➖")
-        kpi_card(
-            "Aderência à meta no horário",
-            f"<span style='color:{cor_idx};'>{fmt_num_br(indice_adherencia_meta, 2)}x {seta_idx}</span>",
-            sub="> 1,00x = acima do necessário.",
-            tooltip="1,00x = exatamente em linha com o necessário para bater a meta; abaixo disso, dia atrasado."
+            f"{format_num_br(ritmo_media, 2)}x",
+            subtitulo="Quanto o dia está acelerado vs o padrão médio do mês.",
+            cor="#ffca28",
+            help_text="Venda acumulada hoje / venda acumulada da média mensal no mesmo slot."
         )
 
-    # Insights
-    st.markdown('<div class="section-title">🧠 Insights Estratégicos</div>', unsafe_allow_html=True)
-    insights_html = f"""
-    <div class="insights-box">
-    <ul>
-        <li>{exp_ritmo}</li>
-        <li>{exp_d1}</li>
-        <li>{exp_d7}</li>
-        <li>Ritmos acima de <b>1,00x</b> indicam aceleração versus o comparativo; abaixo de <b>1,00x</b> apontam perda de tração.</li>
-        <li>A aderência à meta no horário mostra se o dia está adiantado ou atrasado em relação ao que seria esperado para bater a meta.</li>
-    </ul>
-    </div>
-    """
-    st.markdown(insights_html, unsafe_allow_html=True)
+    # Bloco de explicação do que é “ritmo”
+    st.markdown("### ℹ️ Como interpretar o ritmo")
+    with st.container():
+        st.markdown(
+            """
+            <div class="text-card">
+                <ul>
+                    <li><b>Ritmo vs D-1</b>: quanto o dia está mais rápido ou mais lento do que ontem na mesma altura do dia.</li>
+                    <li><b>Ritmo vs D-7</b>: compara com o mesmo dia da semana passada (efeito calendário).</li>
+                    <li><b>Ritmo vs média do mês</b>: indica se o dia está dentro do "padrão do mês" ou fugindo do comportamento típico.</li>
+                </ul>
+                <span style="font-size:0.9rem; color:#b0bec5;">
+                    • Valores em torno de <b>1,00x</b> indicam ritmo parecido com a base de comparação.<br>
+                    • <b>Acima de 1,10x</b> sugerem aceleração (dia forte).<br>
+                    • <b>Abaixo de 0,90x</b> sinalizam perda de tração – atenção para slots seguintes.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # Gráfico curvas por slot
-    st.markdown('<div class="section-title">📊 Curvas de venda por slot (15 min)</div>', unsafe_allow_html=True)
-    fig1 = px.line(
-        curvas_long,
-        x="SLOT",
-        y="Valor",
-        color="Série",
-        markers=False,
-    )
-    fig1.update_layout(
-        height=350,
-        template="plotly_dark",
-        margin=dict(l=10, r=10, t=30, b=10),
-        legend_title_text="",
-    )
-    st.plotly_chart(fig1, use_container_width=True)
+    st.markdown("### 🧠 Narrativa executiva do dia")
 
-    # Gráfico acumulado
-    st.markdown('<div class="section-title">📈 Acumulado vs histórico</div>', unsafe_allow_html=True)
-    fig2 = px.line(
-        acum_long,
-        x="SLOT",
-        y="Valor acumulado",
-        color="Série",
-    )
-    fig2.add_hline(
-        y=meta_dia,
-        line_dash="dash",
-        line_color=WARNING,
-        annotation_text="Meta do dia",
-        annotation_position="top left"
-    )
-    fig2.update_layout(
-        height=350,
-        template="plotly_dark",
-        margin=dict(l=10, r=10, t=30, b=10),
-        legend_title_text="",
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+    coln1, coln2, coln3 = st.columns(3)
 
-    # Heatmap de ritmo vs média por slot
-    st.markdown('<div class="section-title">🔥 Mapa de calor de ritmo vs média</div>', unsafe_allow_html=True)
-    heat_df = grid.copy()
-    heat_df["Ritmo vs média"] = heat_df["ritmo_vs_media"]
-    fig_hm = px.imshow(
-        [heat_df["Ritmo vs média"].values],
-        labels=dict(x="Slot", color="Ritmo vs média"),
-        x=heat_df["SLOT"],
-        aspect="auto",
-        color_continuous_scale="RdYlGn"
-    )
-    fig_hm.add_hline(y=0, line_color="#000000", opacity=0)  # só pra não bugar eixo
-    fig_hm.update_yaxes(showticklabels=False)
-    fig_hm.update_layout(
-        height=140,
-        template="plotly_dark",
-        margin=dict(l=10, r=10, t=30, b=10),
-        coloraxis_colorbar=dict(title="Ritmo")
-    )
-    st.plotly_chart(fig_hm, use_container_width=True)
+    with coln1:
+        st.markdown("**Ritmo atual**")
+        st.markdown(f"<div class='text-card'>{exp_ritmo}</div>", unsafe_allow_html=True)
 
-    # Tabela
-    st.markdown('<div class="section-title">🧮 Tabela detalhada – DDT slot a slot</div>', unsafe_allow_html=True)
-    st.dataframe(grid, use_container_width=True)
+    with coln2:
+        st.markdown("**Leitura vs ontem (D-1)**")
+        st.markdown(f"<div class='text-card'>{exp_d1}</div>", unsafe_allow_html=True)
 
+    with coln3:
+        st.markdown("**Leitura vs D-7**")
+        st.markdown(f"<div class='text-card'>{exp_d7}</div>", unsafe_allow_html=True)
 
 # ======================================================
-#           ABA 2 – SIMULAÇÕES DE META
+# TAB 2 – CURVAS & RITMO
 # ======================================================
-with tab_sim:
-    st.markdown('<div class="section-title">🎯 Simulação de meta</div>', unsafe_allow_html=True)
+with tab2:
+    st.markdown("### 📊 Curvas intradia – HOJE vs D-1 vs D-7 vs média do mês")
 
-    col_left, col_right = st.columns([1, 2])
+    df_plot = df_grid.copy()
+    # Garantir ordem dos slots como string já vem
+    df_plot = df_plot.sort_values("SLOT")
 
-    with col_left:
-        meta_atual = meta_dia
+    # Gráfico de valores por slot
+    fig_val = px.line(
+        df_plot,
+        x="SLOT",
+        y=["valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"],
+        labels={"value": "Valor", "SLOT": "Horário", "variable": "Série"},
+        template="plotly_dark",
+    )
+    fig_val.update_layout(
+        legend_title_text="Série",
+        height=420,
+        margin=dict(l=20, r=20, t=40, b=40)
+    )
+    st.plotly_chart(fig_val, use_container_width=True)
+
+    st.markdown("### 🔍 Desvio de hoje vs curva média do mês (por slot)")
+
+    df_desvio = df_plot.copy()
+    df_desvio["desvio_vs_media"] = df_desvio["valor_hoje"] - df_desvio["valor_media_mes"]
+
+    fig_desvio = px.bar(
+        df_desvio,
+        x="SLOT",
+        y="desvio_vs_media",
+        labels={"desvio_vs_media": "Desvio (R$)", "SLOT": "Horário"},
+        template="plotly_dark",
+    )
+    fig_desvio.update_layout(
+        height=350,
+        margin=dict(l=20, r=20, t=40, b=40)
+    )
+    st.plotly_chart(fig_desvio, use_container_width=True)
+
+    st.markdown("### 📈 Evolução dos ritmos ao longo do dia")
+
+    fig_ritmo = px.line(
+        df_plot,
+        x="SLOT",
+        y=["ritmo_vs_d1", "ritmo_vs_d7", "ritmo_vs_media"],
+        labels={"value": "Ritmo (x)", "SLOT": "Horário", "variable": "Comparação"},
+        template="plotly_dark",
+    )
+    fig_ritmo.update_layout(
+        legend_title_text="Comparação",
+        height=380,
+        margin=dict(l=20, r=20, t=40, b=40)
+    )
+    st.plotly_chart(fig_ritmo, use_container_width=True)
+
+    st.markdown("### 🧮 Tabela detalhada slot a slot")
+    st.dataframe(df_grid, use_container_width=True, height=350)
+
+# ======================================================
+# TAB 3 – SIMULAÇÃO DE META
+# ======================================================
+with tab3:
+    st.markdown("### 🎯 Simulação de metas e gaps")
+
+    col_sim1, col_sim2 = st.columns([2, 3])
+
+    with col_sim1:
+        st.markdown(
+            """
+            <div class='text-card'>
+                <b>Como funciona a simulação?</b><br><br>
+                A projeção de fechamento (já calculada no Colab) é mantida fixa aqui.<br>
+                Nesta aba, você pode testar metas alternativas e observar:
+                <ul>
+                    <li>novo gap projetado,</li>
+                    <li>percentual de atingimento,</li>
+                    <li>status qualitativo (confortável, tensão, crítico).</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
         meta_sim = st.number_input(
-            "Nova meta simulada (R$)",
+            "Meta simulada (R$)",
             min_value=0.0,
-            value=float(meta_atual),
-            step=50000.0,
-            format="%.2f"
+            value=float(meta_dia),
+            step=50000.0
         )
-        gap_sim = projecao - meta_sim
-        venda_esp_sim = meta_sim * frac_hist if frac_hist and frac_hist > 0 else np.nan
-        idx_meta_sim = venda_atual / venda_esp_sim if venda_esp_sim and venda_esp_sim != 0 else np.nan
 
-        st.markdown("### Resultado da simulação")
+        gap_sim = projecao_dia - meta_sim
+        perc_ating = projecao_dia / meta_sim if meta_sim > 0 else 0
+
+        if perc_ating >= 1.05:
+            status_sim = "Confortável"
+            cor_sim = "#00e676"
+        elif perc_ating >= 0.95:
+            status_sim = "Zona de tensão"
+            cor_sim = "#ffeb3b"
+        else:
+            status_sim = "Crítico"
+            cor_sim = "#ff1744"
+
+        st.markdown("#### Resultado da simulação")
         kpi_card(
             "Meta simulada",
-            f"<span style='color:{PRIMARY};'>{fmt_moeda(meta_sim)}</span>",
-            sub="Valor hipotético para teste de cenário.",
+            format_moeda_br(meta_sim),
+            subtitulo="Meta ajustada para análise de cenário.",
+            cor="#29b6f6"
         )
         kpi_card(
-            "Novo gap projetado",
-            f"<span style='color:{PRIMARY if gap_sim >= 0 else DANGER};'>{fmt_moeda(gap_sim)}</span>",
-            sub="Projeção - meta simulada.",
-            tooltip="Se positivo: tendência de superar a meta simulada; se negativo: tendência de ficar abaixo."
-        )
-        cor_idx_sim = PRIMARY if idx_meta_sim >= 1 else DANGER
-        seta_idx_sim = "🔺" if idx_meta_sim >= 1.05 else ("🔻" if idx_meta_sim <= 0.95 else "➖")
-        kpi_card(
-            "Aderência à meta simulada",
-            f"<span style='color:{cor_idx_sim};'>{fmt_num_br(idx_meta_sim,2)}x {seta_idx_sim}</span>",
-            sub="> 1,00x = acima do necessário.",
-            tooltip="Compara o que já vendemos com o que deveríamos ter vendido até agora para bater a meta simulada."
+            "Gap projetado (simulado)",
+            format_moeda_br(gap_sim),
+            subtitulo=f"Atingimento projetado: {format_num_br(perc_ating*100, 1)}%.",
+            cor=cor_sim,
+            badge_text=status_sim,
+            badge_color="#263238"
         )
 
-    with col_right:
-        st.markdown("#### Comparativo de cenários")
-        df_sim = pd.DataFrame({
-            "Cenário": ["Meta atual", "Meta simulada"],
+    with col_sim2:
+        st.markdown("#### Comparação entre cenário real e simulado")
+
+        df_comp = pd.DataFrame({
+            "Cenário": ["Atual (meta oficial)", "Simulado"],
             "Meta (R$)": [meta_dia, meta_sim],
-            "Projeção (R$)": [projecao, projecao],
+            "Projeção (R$)": [projecao_dia, projecao_dia],
+            "Gap (R$)": [desvio_proj, gap_sim]
         })
-        df_sim["Gap (R$)"] = df_sim["Projeção (R$)"] - df_sim["Meta (R$)"]
 
-        df_sim_fmt = df_sim.copy()
-        df_sim_fmt["Meta (R$)"] = df_sim["Meta (R$)"].apply(fmt_moeda)
-        df_sim_fmt["Projeção (R$)"] = df_sim["Projeção (R$)"].apply(fmt_moeda)
-        df_sim_fmt["Gap (R$)"] = df_sim["Gap (R$)"].apply(fmt_moeda)
-        st.table(df_sim_fmt)
+        # Converter para formato BR apenas na visualização
+        df_comp_view = df_comp.copy()
+        df_comp_view["Meta (R$)"] = df_comp["Meta (R$)"].apply(format_moeda_br)
+        df_comp_view["Projeção (R$)"] = df_comp["Projeção (R$)"].apply(format_moeda_br)
+        df_comp_view["Gap (R$)"] = df_comp["Gap (R$)"].apply(format_moeda_br)
 
-        fig_sim = px.bar(
-            df_sim,
+        st.dataframe(df_comp_view, use_container_width=True, height=180)
+
+        # Gráfico simples de barras comparando gaps
+        fig_gap = px.bar(
+            df_comp,
             x="Cenário",
-            y=["Meta (R$)", "Projeção (R$)"],
-            barmode="group",
-        )
-        fig_sim.update_layout(
-            height=320,
+            y="Gap (R$)",
             template="plotly_dark",
-            margin=dict(l=10, r=10, t=30, b=10),
-            legend_title_text="",
+            text="Gap (R$)",
         )
-        st.plotly_chart(fig_sim, use_container_width=True)
-
-
-# ======================================================
-#        ABA 3 – ANÁLISE POR FAIXA HORÁRIA
-# ======================================================
-with tab_faixas:
-    st.markdown('<div class="section-title">⏱️ Análise por faixa horária</div>', unsafe_allow_html=True)
-
-    st.markdown(
-        """
-        <div class="insights-box">
-        As faixas abaixo permitem enxergar onde o dia está “ganhando” ou “perdendo” em relação ao histórico:<br><br>
-        • <b>Madrugada (00h–06h)</b><br>
-        • <b>Manhã (06h–12h)</b><br>
-        • <b>Prime Time (12h–20h)</b><br>
-        • <b>Late Night (20h–24h)</b>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    faixa_selecionada = st.selectbox(
-        "Selecione a faixa horária",
-        faixas_resumo["FAIXA"].tolist()
-    )
-
-    df_faixa = grid_faixas[grid_faixas["FAIXA"] == faixa_selecionada].copy()
-
-    total_faixa_hoje = df_faixa["valor_hoje"].sum()
-    total_faixa_d1   = df_faixa["valor_d1"].sum()
-    total_faixa_d7   = df_faixa["valor_d7"].sum()
-    total_faixa_med  = df_faixa["valor_media_mes"].sum()
-
-    col_fx1, col_fx2, col_fx3, col_fx4 = st.columns(4)
-    with col_fx1:
-        kpi_card("Venda hoje na faixa", fmt_moeda(total_faixa_hoje), sub=faixa_selecionada)
-    with col_fx2:
-        kpi_card("D-1 na faixa", fmt_moeda(total_faixa_d1), sub="mesmo intervalo")
-    with col_fx3:
-        kpi_card("D-7 na faixa", fmt_moeda(total_faixa_d7), sub="mesmo intervalo")
-    with col_fx4:
-        kpi_card("Média mês na faixa", fmt_moeda(total_faixa_med), sub="média histórica")
-
-    # Mini curva desta faixa
-    curvas_faixa = df_faixa.rename(columns=rename_map)
-    curvas_faixa_long = curvas_faixa.melt(
-        id_vars=["SLOT"],
-        value_vars=list(rename_map.values()),
-        var_name="Série",
-        value_name="Valor"
-    )
-
-    st.markdown("#### Curva intradia da faixa selecionada")
-    fig_fx = px.line(
-        curvas_faixa_long,
-        x="SLOT",
-        y="Valor",
-        color="Série",
-    )
-    fig_fx.update_layout(
-        height=320,
-        template="plotly_dark",
-        margin=dict(l=10, r=10, t=30, b=10),
-        legend_title_text="",
-    )
-    st.plotly_chart(fig_fx, use_container_width=True)
-
-    st.markdown("#### Detalhe slot a slot da faixa")
-    st.dataframe(
-        df_faixa[["SLOT", "valor_hoje", "valor_d1", "valor_d7", "valor_media_mes"]],
-        use_container_width=True
-    )
-
-
-# ======================================================
-#        ABA 4 – SOBRE O MODELO
-# ======================================================
-with tab_sobre:
-    st.markdown('<div class="section-title">ℹ️ Sobre o modelo de projeção</div>', unsafe_allow_html=True)
-
-    explicacao_modelo_html = f"""
-    <div class="insights-box" style="background-color:#050b12;border-color:#1a2a3a;">
-
-    <b>1. Curva intradia histórica</b><br>
-    • Para cada slot de 15 minutos, medimos qual fração média do faturamento diário costuma ser concluída ao longo do mês.<br>
-    • No horário atual, o padrão histórico indica que cerca de <b>{fmt_percent(frac_hist, 2)}</b> do dia já deveria estar vendido.
-
-    <br><br>
-
-    <b>2. Base matemática de projeção</b><br>
-    • Consideramos a venda acumulada até o último slot: <b>{fmt_moeda(venda_atual)}</b>.<br>
-    • Dividimos essa venda pela fração histórica do horário, o que gera uma projeção-base de fechamento.<br>
-    • Essa base resulta em aproximadamente <b>{fmt_moeda(projecao)}</b> para o dia.
-
-    <br><br>
-
-    <b>3. Camada de consistência por ritmo</b><br>
-    • Em paralelo, acompanhamos os ritmos intradia:<br>
-    &nbsp;&nbsp;• Ritmo vs D-1: <b>{fmt_num_br(ritmo_d1,2)}x</b><br>
-    &nbsp;&nbsp;• Ritmo vs D-7: <b>{fmt_num_br(ritmo_d7,2)}x</b><br>
-    &nbsp;&nbsp;• Ritmo vs média do mês: <b>{fmt_num_br(ritmo_media,2)}x</b><br>
-    • Ritmos acima de <b>1,00x</b> sugerem aceleração; abaixo disso, perda de tração.<br>
-    • Esses indicadores funcionam como checagem de consistência do comportamento do dia.
-
-    <br><br>
-
-    <b>4. Meta e aderência intradia</b><br>
-    • A meta do dia é de <b>{fmt_moeda(meta_dia)}</b>.<br>
-    • Com base na curva intradia, a venda esperada para o horário atual seria <b>{fmt_moeda(venda_esperada_horario)}</b>.<br>
-    • A aderência à meta no horário é de <b>{fmt_num_br(indice_adherencia_meta,2)}x</b>, mostrando se estamos adiantados ou atrasados em relação ao alvo.
-
-    <br><br>
-
-    <b>Conclusão executiva</b><br>
-    Combinando curva histórica, venda atual, meta e consistência de ritmo, o fechamento projetado é de
-    <b>{fmt_moeda(projecao)}</b>.<br>
-    Isso representa um gap de
-    <b style="color:{PRIMARY if gap_proj >= 0 else DANGER};">{fmt_moeda(gap_proj)}</b>
-    em relação à meta consolidada de <b>{fmt_moeda(meta_dia)}</b>.
-
-    </div>
-    """
-    st.markdown(explicacao_modelo_html, unsafe_allow_html=True)
-
-    st.markdown("### 🧾 Glossário rápido")
-    st.markdown(
-        """
-        - **Meta do dia**: objetivo financeiro consolidado para Site + App.<br>
-        - **Venda atual**: faturamento acumulado até o último slot processado na base.<br>
-        - **Projeção de fechamento**: estimativa do faturamento total do dia, caso o ritmo atual se mantenha.<br>
-        - **Ritmo vs D-1 / D-7 / mês**: quantas vezes o dia de hoje está melhor ou pior do que o comparativo.<br>
-        - **Fração histórica do dia**: percentual médio do faturamento diário que, historicamente, já aconteceu até o horário atual.<br>
-        - **Aderência à meta no horário**: relação entre a venda atual e a venda que seria esperada nesse horário para bater a meta.
-        """,
-        unsafe_allow_html=True,
-    )
+        fig_gap.update_traces(texttemplate="%{text:.0f}", textposition="outside")
+        fig_gap.update_layout(
+            height=360,
+            margin=dict(l=20, r=20, t=40, b=40)
+        )
+        st.plotly_chart(fig_gap, use_container_width=True)
