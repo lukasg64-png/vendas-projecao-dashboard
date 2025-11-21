@@ -21,7 +21,7 @@ def hash_password(password: str):
 # Usuários permitidos
 USERS = {
     "fsj": hash_password("blackfriday2025"),
-    "lucas": hash_password("panvel2025")
+    "lucas": hash_password("fsj2025")
 }
 
 def login():
