@@ -121,7 +121,21 @@ st.title("📈 Projeção de Vendas – Site + App")
 
 # --- Carregar arquivos ---
 df = pd.read_csv("data/ultima_base.csv")
+# --- Carregar metas (compatível com sua planilha real) ---
 metas = pd.read_excel("data/metas_novembro.xlsx")
+
+# Padronizar nomes
+metas = metas.rename(columns={
+    "Dia": "dia",
+    "App": "app",
+    "Site": "site",
+    "site + APP": "total"
+})
+
+# Garantir tipos corretos
+metas["dia"] = metas["dia"].astype(int)
+metas["total"] = metas["total"].astype(float)
+
 
 df["DATA"] = pd.to_datetime(df["DATA"]).dt.date
 
