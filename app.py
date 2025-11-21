@@ -1,118 +1,140 @@
-import streamlit as st
-import pandas as pd
+def montar_projecao(df_slots, meta_dia, data_ref=None):
+    df = df_slots.copy()
 
-# ======================================================
-#                 CONFIGURAÇÃO DO APP
-# ======================================================
-st.set_page_config(
-    page_title="📈 Projeção de Vendas – FSJ Black Friday",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+    # ----------------------------------------------
+    # 1. Data de referência e D-1 / D-7
+    # ----------------------------------------------
+    if data_ref is None:
+        data_ref = df["DATA"].max()
 
-PRIMARY = "#00C853"
-DANGER = "#D50000"
-WARNING = "#FFD600"
-CARD_BG = "#1E1E1E"
+    data_ref = pd.to_datetime(data_ref).date()
+    data_d1  = data_ref - timedelta(days=1)
+    data_d7  = data_ref - timedelta(days=7)
 
-# ======================================================
-#                   SISTEMA DE LOGIN
-# ======================================================
+    # ----------------------------------------------
+    # 2. Curva por dia (DDT)
+    # ----------------------------------------------
+    def curva(data_alvo):
+        cur = df[df["DATA"] == data_alvo]
+        if cur.empty:
+            return pd.DataFrame({"SLOT": [], "VALOR_TOTAL_15M": []})
+        return (
+            cur.groupby("SLOT")["VALOR_TOTAL_15M"]
+              .sum()
+              .reset_index()
+              .sort_values("SLOT")
+        )
 
-def load_users():
-    df = pd.read_csv("data/usuarios.csv")
-    df.columns = ["usuario", "senha"]
-    return df
+    curva_hoje = curva(data_ref)
+    curva_d1   = curva(data_d1)
+    curva_d7   = curva(data_d7)
 
-def check_login():
-    st.markdown("### 🔐 Login – Farmácias São João")
+    # ----------------------------------------------
+    # 3. Curva média do mês
+    # ----------------------------------------------
+    datas_ts = pd.to_datetime(df["DATA"])
+    mes = data_ref.month
+    ano = data_ref.year
 
-    user = st.text_input("Usuário")
-    pwd  = st.text_input("Senha", type="password")
+    base_mes = df[
+        (datas_ts.dt.month == mes) &
+        (datas_ts.dt.year  == ano)
+    ]
 
-    if st.button("Entrar"):
-        users = load_users()
-        if ((users["usuario"] == user) & (users["senha"] == pwd)).any():
-            st.session_state["auth"] = True
-            st.rerun()
-        else:
-            st.error("Usuário ou senha incorretos.")
-
-if "auth" not in st.session_state:
-    st.session_state["auth"] = False
-
-if not st.session_state["auth"]:
-    check_login()
-    st.stop()
-
-# ======================================================
-#                CARREGAR ARQUIVOS DO COLAB
-# ======================================================
-
-grid = pd.read_csv("data/saida_grid.csv")
-resumo = pd.read_csv("data/saida_resumo.csv").iloc[0].to_dict()
-
-# ======================================================
-#                       KPIs
-# ======================================================
-st.title("📈 Painel Executivo – Projeção de Vendas (Site + App)")
-
-col1, col2, col3, col4 = st.columns(4)
-
-def kpi(title, value, color):
-    st.markdown(
-        f"""
-        <div style='background:{CARD_BG}; 
-                    padding:18px; 
-                    border-radius:10px; 
-                    text-align:center; 
-                    border-left:6px solid {color};'>
-            <h4 style='margin:0; color:white'>{title}</h4>
-            <h2 style='margin:0; color:{color}'>{value}</h2>
-        </div>
-        """,
-        unsafe_allow_html=True
+    curva_media = (
+        base_mes.groupby("SLOT")["VALOR_TOTAL_15M"]
+                .mean()
+                .reset_index()
+                .sort_values("SLOT")
     )
 
-kpi("Meta do Dia",       f"R$ {resumo['meta_dia']:,.0f}", PRIMARY)
-kpi("Venda Atual",       f"R$ {resumo['venda_atual']:,.0f}", PRIMARY)
-kpi("Projeção do Dia",   f"R$ {resumo['projecao']:,.0f}",
-    PRIMARY if resumo["projecao"] >= resumo["meta_dia"] else DANGER)
-kpi("Gap Projetado",     f"R$ {resumo['gap']:,.0f}",
-    PRIMARY if resumo["gap"] >= 0 else DANGER)
+    # ----------------------------------------------
+    # 4. Grid base de HOJE
+    # ----------------------------------------------
+    grid = curva_hoje[["SLOT"]].copy()
 
-# ======================================================
-#                INSIGHTS EXECUTIVOS
-# ======================================================
-st.subheader("🧠 Insights Estratégicos")
+    grid = grid.merge(
+        curva_hoje.rename(columns={"VALOR_TOTAL_15M": "valor_hoje"}),
+        on="SLOT",
+        how="left"
+    )
+    grid = grid.merge(
+        curva_d1.rename(columns={"VALOR_TOTAL_15M": "valor_d1"}),
+        on="SLOT",
+        how="left"
+    )
+    grid = grid.merge(
+        curva_d7.rename(columns={"VALOR_TOTAL_15M": "valor_d7"}),
+        on="SLOT",
+        how="left"
+    )
+    grid = grid.merge(
+        curva_media.rename(columns={"VALOR_TOTAL_15M": "valor_media_mes"}),
+        on="SLOT",
+        how="left"
+    )
 
-insights = f"""
-• Até agora vendemos **R$ {resumo['venda_atual']:,.0f}**, atingindo  
-  **{resumo['frac_hist']*100:.2f}%** da curva histórica.
+    grid = grid.fillna(0.0)
 
-• A projeção indica **R$ {resumo['projecao']:,.0f}**,  
-  frente à meta de **R$ {resumo['meta_dia']:,.0f}**.
+    # ----------------------------------------------
+    # 5. Acumulados
+    # ----------------------------------------------
+    grid["acum_hoje"]      = grid["valor_hoje"].cumsum()
+    grid["acum_d1"]        = grid["valor_d1"].cumsum()
+    grid["acum_d7"]        = grid["valor_d7"].cumsum()
+    grid["acum_media_mes"] = grid["valor_media_mes"].cumsum()
 
-• Ontem no mesmo horário: **R$ {resumo['total_d1']:,.0f}**  
-  (ritmo: {resumo["ritmo_d1"]:.2f}x)
+    # Fração histórica (curva intradia do mês)
+    max_media = grid["acum_media_mes"].max()
+    if max_media > 0:
+        grid["frac_hist"] = grid["acum_media_mes"] / max_media
+    else:
+        grid["frac_hist"] = 0.0
 
-• Há 7 dias no mesmo horário: **R$ {resumo['total_d7']:,.0f}**  
-  (ritmo: {resumo["ritmo_d7"]:.2f}x)
-"""
+    # ----------------------------------------------
+    # 6. Ritmo e projeção
+    # ----------------------------------------------
+    ultimo_idx   = grid.index.max()
+    venda_atual  = float(grid.loc[ultimo_idx, "acum_hoje"])
+    acum_d1_ult  = float(grid.loc[ultimo_idx, "acum_d1"])
+    acum_d7_ult  = float(grid.loc[ultimo_idx, "acum_d7"])
+    acum_med_ult = float(grid.loc[ultimo_idx, "acum_media_mes"])
+    frac_hist_atual = float(grid.loc[ultimo_idx, "frac_hist"])
 
-st.info(insights)
+    ritmo_d1    = venda_atual / acum_d1_ult  if acum_d1_ult  > 0 else 0.0
+    ritmo_d7    = venda_atual / acum_d7_ult  if acum_d7_ult  > 0 else 0.0
+    ritmo_media = venda_atual / acum_med_ult if acum_med_ult > 0 else 0.0
 
-# ======================================================
-#                    CURVA DDT
-# ======================================================
-st.subheader("📊 Curva DDT – Slot a Slot")
+    # Se temos fração histórica > 0, projeta por ela
+    if frac_hist_atual > 0:
+        projecao = venda_atual / frac_hist_atual
+    else:
+        projecao = venda_atual
 
-st.line_chart(
-    grid.set_index("SLOT")[["valor_hoje","valor_d1","valor_d7","valor_media_mes"]]
-)
+    # Totais do dia anterior e D-7 (até o último slot)
+    total_d1 = float(grid["acum_d1"].max())
+    total_d7 = float(grid["acum_d7"].max())
 
-# ======================================================
-#                  TABELA COMPLETA
-# ======================================================
-st.subheader("🧮 Tabela Completa")
-st.dataframe(grid, use_container_width=True)
+    # ----------------------------------------------
+    # 7. Dicionário RESUMO no padrão esperado pelo front
+    # ----------------------------------------------
+    resumo = {
+        "data": str(data_ref),
+
+        "meta_dia": float(meta_dia),
+        "venda_atual": float(venda_atual),
+
+        "projecao": float(projecao),
+        "gap": float(projecao - meta_dia),
+
+        "ritmo_d1": float(ritmo_d1),
+        "ritmo_d7": float(ritmo_d7),
+        "ritmo_media": float(ritmo_media),
+
+        "total_d1": float(total_d1),
+        "total_d7": float(total_d7),
+
+        "frac_hist": float(frac_hist_atual),
+    }
+
+    return grid, resumo
