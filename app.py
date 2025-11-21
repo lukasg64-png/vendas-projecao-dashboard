@@ -81,7 +81,7 @@ st.markdown(
     }}
 
     .kpi-value {{
-        font-size: 1.6rem;
+        font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 0.15rem;
     }}
@@ -245,6 +245,9 @@ exp_ritmo = r.get("explicacao_ritmo", "")
 exp_d1    = r.get("explicacao_d1", "")
 exp_d7    = r.get("explicacao_d7", "")
 
+# meta-alvo intradia pra "estar em dia" com a meta
+venda_esperada_horario = meta_dia * frac_hist if not pd.isna(meta_dia) and not pd.isna(frac_hist) else np.nan
+indice_adherencia_meta = venda_atual / venda_esperada_horario if venda_esperada_horario and venda_esperada_horario != 0 else np.nan
 
 # ======================================================
 #                 HEADER DO PAINEL (logado)
@@ -264,7 +267,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
 
 # ======================================================
 #                 FUNÇÕES DE UI
@@ -375,6 +377,7 @@ tab_dash, tab_sim, tab_faixas, tab_sobre = st.tabs(
 with tab_dash:
     st.markdown('<div class="section-title">🎯 Visão Geral do Dia</div>', unsafe_allow_html=True)
 
+    # Linha 1 – visão macro
     row1 = st.columns(4)
     with row1[0]:
         kpi_card(
@@ -401,10 +404,11 @@ with tab_dash:
         kpi_card(
             "Gap projetado vs meta",
             f"<span style='color:{PRIMARY if gap_proj >= 0 else DANGER};'>{fmt_moeda(gap_proj)}</span>",
-            sub="Posição se mantivermos o ritmo atual.",
-            tooltip="Diferença entre a projeção de fechamento e a meta do dia."
+            sub="Projeção - meta do dia.",
+            tooltip="Se positivo, tendência de superar a meta; se negativo, tendência de fechar abaixo."
         )
 
+    # Linha 2 – comparativos
     row2 = st.columns(4)
     with row2[0]:
         kpi_card(
@@ -422,27 +426,31 @@ with tab_dash:
         )
     with row2[2]:
         cor_ritmo_d1 = PRIMARY if ritmo_d1 >= 1 else DANGER
+        seta_d1 = "🔺" if ritmo_d1 >= 1.05 else ("🔻" if ritmo_d1 <= 0.95 else "➖")
         kpi_card(
             "Ritmo vs D-1",
-            f"<span style='color:{cor_ritmo_d1};'>{fmt_num_br(ritmo_d1, 2)}x</span>",
+            f"<span style='color:{cor_ritmo_d1};'>{fmt_num_br(ritmo_d1, 2)}x {seta_d1}</span>",
             sub="> 1,00x = acima de ontem.",
             tooltip="Compara a venda acumulada de hoje com a de ontem no mesmo horário."
         )
     with row2[3]:
         cor_ritmo_d7 = PRIMARY if ritmo_d7 >= 1 else DANGER
+        seta_d7 = "🔺" if ritmo_d7 >= 1.05 else ("🔻" if ritmo_d7 <= 0.95 else "➖")
         kpi_card(
             "Ritmo vs D-7",
-            f"<span style='color:{cor_ritmo_d7};'>{fmt_num_br(ritmo_d7, 2)}x</span>",
+            f"<span style='color:{cor_ritmo_d7};'>{fmt_num_br(ritmo_d7, 2)}x {seta_d7}</span>",
             sub="> 1,00x = acima da semana passada.",
             tooltip="Compara a venda de hoje com a do mesmo dia da semana anterior."
         )
 
-    row3 = st.columns(2)
+    # Linha 3 – aderência de meta e ritmo médio
+    row3 = st.columns(4)
     with row3[0]:
         cor_ritmo_med = PRIMARY if ritmo_media >= 1 else DANGER
+        seta_med = "🔺" if ritmo_media >= 1.05 else ("🔻" if ritmo_media <= 0.95 else "➖")
         kpi_card(
             "Ritmo vs média do mês",
-            f"<span style='color:{cor_ritmo_med};'>{fmt_num_br(ritmo_media, 2)}x</span>",
+            f"<span style='color:{cor_ritmo_med};'>{fmt_num_br(ritmo_media, 2)}x {seta_med}</span>",
             sub="> 1,00x = acima da média intradia.",
             tooltip="Indica se o dia está acima ou abaixo do comportamento médio do mês."
         )
@@ -451,7 +459,23 @@ with tab_dash:
             "Dia já percorrido (curva hist.)",
             f"<span style='color:{WARNING};'>{fmt_percent(frac_hist, 2)}</span>",
             sub="Fatia média do dia já realizada nesse horário.",
-            tooltip="Mostra em que percentual do dia, em média, o canal costuma estar nesse slot."
+            tooltip="Percentual médio do faturamento diário que, historicamente, já aconteceu até este slot."
+        )
+    with row3[2]:
+        kpi_card(
+            "Venda esperada neste horário",
+            f"<span>{fmt_moeda(venda_esperada_horario)}</span>",
+            sub="Para estar em linha com a meta.",
+            tooltip="Quanto deveríamos ter vendido até agora para estar 'on track' com a meta do dia."
+        )
+    with row3[3]:
+        cor_idx = PRIMARY if indice_adherencia_meta >= 1 else DANGER
+        seta_idx = "🔺" if indice_adherencia_meta >= 1.05 else ("🔻" if indice_adherencia_meta <= 0.95 else "➖")
+        kpi_card(
+            "Aderência à meta no horário",
+            f"<span style='color:{cor_idx};'>{fmt_num_br(indice_adherencia_meta, 2)}x {seta_idx}</span>",
+            sub="> 1,00x = acima do necessário.",
+            tooltip="1,00x = exatamente em linha com o necessário para bater a meta; abaixo disso, dia atrasado."
         )
 
     # Insights
@@ -462,7 +486,8 @@ with tab_dash:
         <li>{exp_ritmo}</li>
         <li>{exp_d1}</li>
         <li>{exp_d7}</li>
-        <li>Ritmo &gt; <b>1,00x</b> indica dia mais forte que o comparativo; ritmo &lt; <b>1,00x</b> aponta atenção e necessidade de ação comercial.</li>
+        <li>Ritmos acima de <b>1,00x</b> indicam aceleração versus o comparativo; abaixo de <b>1,00x</b> apontam perda de tração.</li>
+        <li>A aderência à meta no horário mostra se o dia está adiantado ou atrasado em relação ao que seria esperado para bater a meta.</li>
     </ul>
     </div>
     """
@@ -508,28 +533,26 @@ with tab_dash:
     )
     st.plotly_chart(fig2, use_container_width=True)
 
-    # Ritmos
-    st.markdown('<div class="section-title">📉 Ritmos por horário</div>', unsafe_allow_html=True)
-    fig3 = px.line(
-        ritmo_long,
-        x="SLOT",
-        y="Ritmo",
-        color="Série",
+    # Heatmap de ritmo vs média por slot
+    st.markdown('<div class="section-title">🔥 Mapa de calor de ritmo vs média</div>', unsafe_allow_html=True)
+    heat_df = grid.copy()
+    heat_df["Ritmo vs média"] = heat_df["ritmo_vs_media"]
+    fig_hm = px.imshow(
+        [heat_df["Ritmo vs média"].values],
+        labels=dict(x="Slot", color="Ritmo vs média"),
+        x=heat_df["SLOT"],
+        aspect="auto",
+        color_continuous_scale="RdYlGn"
     )
-    fig3.add_hline(
-        y=1.0,
-        line_dash="dash",
-        line_color="#888888",
-        annotation_text="1,00x (equilíbrio)",
-        annotation_position="top left"
-    )
-    fig3.update_layout(
-        height=320,
+    fig_hm.add_hline(y=0, line_color="#000000", opacity=0)  # só pra não bugar eixo
+    fig_hm.update_yaxes(showticklabels=False)
+    fig_hm.update_layout(
+        height=140,
         template="plotly_dark",
         margin=dict(l=10, r=10, t=30, b=10),
-        legend_title_text="",
+        coloraxis_colorbar=dict(title="Ritmo")
     )
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig_hm, use_container_width=True)
 
     # Tabela
     st.markdown('<div class="section-title">🧮 Tabela detalhada – DDT slot a slot</div>', unsafe_allow_html=True)
@@ -554,18 +577,28 @@ with tab_sim:
             format="%.2f"
         )
         gap_sim = projecao - meta_sim
+        venda_esp_sim = meta_sim * frac_hist if frac_hist and frac_hist > 0 else np.nan
+        idx_meta_sim = venda_atual / venda_esp_sim if venda_esp_sim and venda_esp_sim != 0 else np.nan
 
         st.markdown("### Resultado da simulação")
         kpi_card(
             "Meta simulada",
             f"<span style='color:{PRIMARY};'>{fmt_moeda(meta_sim)}</span>",
-            sub="Valor hipotético para teste de cenário."
+            sub="Valor hipotético para teste de cenário.",
         )
         kpi_card(
             "Novo gap projetado",
             f"<span style='color:{PRIMARY if gap_sim >= 0 else DANGER};'>{fmt_moeda(gap_sim)}</span>",
             sub="Projeção - meta simulada.",
             tooltip="Se positivo: tendência de superar a meta simulada; se negativo: tendência de ficar abaixo."
+        )
+        cor_idx_sim = PRIMARY if idx_meta_sim >= 1 else DANGER
+        seta_idx_sim = "🔺" if idx_meta_sim >= 1.05 else ("🔻" if idx_meta_sim <= 0.95 else "➖")
+        kpi_card(
+            "Aderência à meta simulada",
+            f"<span style='color:{cor_idx_sim};'>{fmt_num_br(idx_meta_sim,2)}x {seta_idx_sim}</span>",
+            sub="> 1,00x = acima do necessário.",
+            tooltip="Compara o que já vendemos com o que deveríamos ter vendido até agora para bater a meta simulada."
         )
 
     with col_right:
@@ -576,6 +609,7 @@ with tab_sim:
             "Projeção (R$)": [projecao, projecao],
         })
         df_sim["Gap (R$)"] = df_sim["Projeção (R$)"] - df_sim["Meta (R$)"]
+
         df_sim_fmt = df_sim.copy()
         df_sim_fmt["Meta (R$)"] = df_sim["Meta (R$)"].apply(fmt_moeda)
         df_sim_fmt["Projeção (R$)"] = df_sim["Projeção (R$)"].apply(fmt_moeda)
@@ -632,11 +666,11 @@ with tab_faixas:
     with col_fx1:
         kpi_card("Venda hoje na faixa", fmt_moeda(total_faixa_hoje), sub=faixa_selecionada)
     with col_fx2:
-        kpi_card("D-1 na faixa", fmt_moeda(total_faixa_d1), sub=" mesmo intervalo")
+        kpi_card("D-1 na faixa", fmt_moeda(total_faixa_d1), sub="mesmo intervalo")
     with col_fx3:
-        kpi_card("D-7 na faixa", fmt_moeda(total_faixa_d7), sub=" mesmo intervalo")
+        kpi_card("D-7 na faixa", fmt_moeda(total_faixa_d7), sub="mesmo intervalo")
     with col_fx4:
-        kpi_card("Média mês na faixa", fmt_moeda(total_faixa_med), sub=" média histórica")
+        kpi_card("Média mês na faixa", fmt_moeda(total_faixa_med), sub="média histórica")
 
     # Mini curva desta faixa
     curvas_faixa = df_faixa.rename(columns=rename_map)
@@ -701,8 +735,15 @@ with tab_sobre:
 
     <br><br>
 
+    <b>4. Meta e aderência intradia</b><br>
+    • A meta do dia é de <b>{fmt_moeda(meta_dia)}</b>.<br>
+    • Com base na curva intradia, a venda esperada para o horário atual seria <b>{fmt_moeda(venda_esperada_horario)}</b>.<br>
+    • A aderência à meta no horário é de <b>{fmt_num_br(indice_adherencia_meta,2)}x</b>, mostrando se estamos adiantados ou atrasados em relação ao alvo.
+
+    <br><br>
+
     <b>Conclusão executiva</b><br>
-    Combinando curva histórica, venda atual e consistência de ritmo, o fechamento projetado é de
+    Combinando curva histórica, venda atual, meta e consistência de ritmo, o fechamento projetado é de
     <b>{fmt_moeda(projecao)}</b>.<br>
     Isso representa um gap de
     <b style="color:{PRIMARY if gap_proj >= 0 else DANGER};">{fmt_moeda(gap_proj)}</b>
@@ -719,7 +760,8 @@ with tab_sobre:
         - **Venda atual**: faturamento acumulado até o último slot processado na base.<br>
         - **Projeção de fechamento**: estimativa do faturamento total do dia, caso o ritmo atual se mantenha.<br>
         - **Ritmo vs D-1 / D-7 / mês**: quantas vezes o dia de hoje está melhor ou pior do que o comparativo.<br>
-        - **Frac. histórica do dia**: percentual médio do faturamento diário que, historicamente, já aconteceu até o horário atual.
+        - **Fração histórica do dia**: percentual médio do faturamento diário que, historicamente, já aconteceu até o horário atual.<br>
+        - **Aderência à meta no horário**: relação entre a venda atual e a venda que seria esperada nesse horário para bater a meta.
         """,
         unsafe_allow_html=True,
     )
