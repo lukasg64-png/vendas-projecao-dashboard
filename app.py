@@ -198,43 +198,43 @@ def fmt_number_br(x, decimals: int = 2) -> str:
 # =========================================================
 # HELPERS: COMPONENTES VISUAIS
 # =========================================================
-def kpi_card(
-    title: str,
-    value: str,
-    subtitle: str = "",
-    color: str = PRIMARY,
-    tooltip: str | None = None,
-):
-    """KPI em formato de card, estilizado com HTML + animações."""
+def kpi_card(title: str, value: str, subtitle: str = "", color: str = PRIMARY, tooltip: str = None):
+    """KPI em formato de card, 100% isolado para não quebrar o layout."""
+
     info_html = ""
     if tooltip:
         safe_tip = html.escape(tooltip, quote=True)
-        info_html = (
-            f"<span style='margin-left:6px; cursor:help;' title='{safe_tip}'>ℹ️</span>"
-        )
+        info_html = f"<span style='margin-left:6px; cursor:help;' title='{safe_tip}'>ℹ️</span>"
 
     html_block = f"""
-    <div class="kpi-card" style="
-        background:{CARD_BG};
-        padding:18px 20px;
-        border-radius:12px;
-        border:1px solid #333;
-        box-shadow:0 0 10px rgba(0,0,0,0.4);
-        min-height:90px;
-    ">
-        <div style="font-size:0.8rem;color:#BBBBBB;display:flex;align-items:center;justify-content:space-between;">
-            <span>{html.escape(title)}</span>
-            {info_html}
-        </div>
-        <div class="kpi-main-value" style="font-size:1.7rem;font-weight:700;margin-top:4px;color:{color};">
-            {value}
-        </div>
-        <div style="font-size:0.75rem;color:#888888;margin-top:6px;">
-            {subtitle}
+    <div style="width:100%; display:flex; justify-content:center;">
+        <div style="
+            background:{CARD_BG};
+            width:100%;
+            padding:18px 20px;
+            border-radius:12px;
+            border:1px solid #333;
+            box-shadow:0 0 10px rgba(0,0,0,0.4);
+            min-height:90px;
+        ">
+            <div style="font-size:0.8rem;color:#BBBBBB;display:flex;align-items:center;justify-content:space-between;">
+                <span>{html.escape(title)}</span>
+                {info_html}
+            </div>
+
+            <div style="font-size:1.7rem;font-weight:700;margin-top:4px;color:{color};">
+                {value}
+            </div>
+
+            <div style="font-size:0.75rem;color:#888888;margin-top:6px;">
+                {subtitle}
+            </div>
         </div>
     </div>
     """
+
     st.markdown(html_block, unsafe_allow_html=True)
+
 
 
 def gauge_ritmo(title: str, valor: float, tooltip: str = ""):
