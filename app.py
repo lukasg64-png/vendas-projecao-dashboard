@@ -238,22 +238,18 @@ def kpi_card(
 
 
 def gauge_ritmo(title: str, valor: float, tooltip: str = ""):
-    """Gauge para ritmos (esperado ~1.0), com faixa dinâmica e visual mais limpo."""
-    # Não deixa o range explodir nem ficar minúsculo
+    """Gauge centralizado e com tamanho uniforme, sem alterar mais nada do app."""
+    
     max_range = max(1.6, abs(valor) * 1.3)
 
     fig = go.Figure(
         go.Indicator(
             mode="gauge+number",
             value=valor,
-            number={"valueformat": ".2f"},
-            title={"text": title, "font": {"size": 14}},
+            number={"valueformat": ".2f", "font": {"size": 38}},
+            title={"text": title, "font": {"size": 16}},
             gauge={
-                "axis": {
-                    "range": [0, max_range],
-                    "tickwidth": 1,
-                    "tickcolor": "#666",
-                },
+                "axis": {"range": [0, max_range], "tickwidth": 1, "tickcolor": "#666"},
                 "bar": {"color": PRIMARY},
                 "steps": [
                     {"range": [0, 0.8], "color": "#1E1E1E"},
@@ -269,15 +265,32 @@ def gauge_ritmo(title: str, valor: float, tooltip: str = ""):
             },
         )
     )
+
     fig.update_layout(
-        margin=dict(l=10, r=10, t=40, b=10),
-        height=220,
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=260,
+        width=330,
         paper_bgcolor="rgba(0,0,0,0)",
         font={"color": "#EEEEEE", "family": "sans-serif"},
     )
+
+    # 🔥 Centraliza o gauge sem alterar nada no layout
+    st.markdown(
+        "<div style='width:340px; margin:auto; text-align:center;'>",
+        unsafe_allow_html=True,
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=False,
+        config={"displayModeBar": False},
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
     if tooltip:
         st.caption(tooltip)
-    st.plotly_chart(fig, use_container_width=True)
+
 
 
 # =========================================================
